@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+option go_package = "./gen";
+
+service QueueService {
+  rpc Enqueue (EnqueueRequest) returns (Nothing) {}
+  rpc Dequeue (QueueID) returns (DequeueResponse) {}
+  rpc Purge (QueueID) returns (QueueLength) {}
+  rpc Length (QueueID) returns (QueueLength) {}
+  rpc Health (Nothing) returns (Nothing) {}
+}
+
+message EnqueueRequest {
+    string queue = 1;
+    bytes data = 2;
+}
+
+message Nothing {}
+
+message QueueID {
+    string queue = 1;
+}
+
+message QueueLength {
+    int64 count = 1;
+}
+
+message DequeueResponse {
+    bytes data = 1;
+}

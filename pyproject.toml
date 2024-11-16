@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "kast"
+version = "0.1.0"
+description = ""
+authors = ["thekashifmalik <emailkashifmalik@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12.3"
+grpcio = "^1.67.1"
+grpcio-tools = "^1.67.1"
+grpclib = "^0.4.7"
+protobuf = "^5.28.3"
+protoletariat = "^3.3.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
