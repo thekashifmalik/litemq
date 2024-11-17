@@ -33,7 +33,7 @@ func NewQueue(name string) *Queue {
 }
 
 func NewServer() *Server {
-	slog.Info("HTTPQ started")
+	slog.Info("memq started")
 	return &Server{
 		queues: map[string]*Queue{},
 	}
