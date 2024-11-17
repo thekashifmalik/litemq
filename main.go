@@ -115,7 +115,7 @@ func (s *Server) Health(ctx context.Context, request *gen.Nothing) (*gen.Nothing
 }
 
 func main() {
-	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", 42090))
+	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", 42090))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
