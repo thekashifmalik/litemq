@@ -47,8 +47,7 @@ func (s *Server) Enqueue(ctx context.Context, request *gen.EnqueueRequest) (*gen
 		channel := queue.channels[0]
 		queue.channels = queue.channels[1:]
 		channel <- request.Data
-		// TODO: Figure out if we need to close or remove this channel explicitly here. It is removed from the
-		// queue.channels slice but donunclear if it will be garbade-collected.
+		close(channel)
 	} else {
 		queue.data = append(queue.data, request.Data)
 	}
@@ -75,6 +74,19 @@ func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.Dequeu
 	case data := <-channel:
 		return &gen.DequeueResponse{Data: data}, nil
 	case <-ctx.Done():
+		// TODO: Figure out if there is a race-condition here with the context channel select and the queue lock being
+		// acquired. If a concurrent enqueue request acquires the lock between these operations, it can write a message
+		// to the  channel which will then be closed here.
+		queue.lock.Lock()
+		channels := []chan []byte{}
+		for _, ch := range queue.channels {
+			if ch != channel {
+				channels = append(channels, ch)
+			}
+		}
+		queue.channels = channels
+		queue.lock.Unlock()
+		close(channel)
 		return nil, ctx.Err()
 	}
 }
