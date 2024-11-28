@@ -17,16 +17,13 @@ proto:
 		--module-suffixes _grpc.py \
 	  	protoc --proto-path=. --python_out=gen --python_grpc_out=gen service.proto
 
-
 .PHONY: run
 run:
 	@go run cmd/litemq/main.go
 
-
 .PHONY: build
 build:
 	@go build -o build/litemq cmd/litemq/main.go
-
 
 .PHONY: client
 client:
