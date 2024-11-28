@@ -33,23 +33,13 @@ func (s *Server) Enqueue(ctx context.Context, request *gen.EnqueueRequest) (*gen
 func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.DequeueResponse, error) {
 	slog.Info(fmt.Sprintf("DEQUEUE %v", request.Queue))
 	queue := s.getOrCreateQueue(request.Queue)
-	data, channel := queue.LockAndDequeueOrChannel()
-	if channel == nil {
-		slog.Debug(fmt.Sprintf("< %v bytes", int64(len(data))))
-		return &gen.DequeueResponse{Data: data}, nil
-	}
-	select {
-	case data := <-channel:
-		slog.Debug(fmt.Sprintf("< %v bytes", int64(len(data))))
-		return &gen.DequeueResponse{Data: data}, nil
-	case <-ctx.Done():
-		// TODO: Figure out if there is a race-condition here with the context channel select and the queue lock being
-		// acquired. If a concurrent enqueue request acquires the lock between these operations, it can write a message
-		// to the  channel which will then be closed here.
-		queue.LockAndDisconnect(channel)
+	data, err := queue.LockAndDequeue(ctx)
+	if err != nil {
 		slog.Debug("< disconnected")
-		return nil, ctx.Err()
+		return nil, err
 	}
+	slog.Debug(fmt.Sprintf("< %v bytes", int64(len(data))))
+	return &gen.DequeueResponse{Data: data}, nil
 }
 
 func (s *Server) getOrCreateQueue(name string) *Queue {

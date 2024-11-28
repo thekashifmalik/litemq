@@ -1,6 +1,9 @@
 package server
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 type Queue struct {
 	messages [][]byte
@@ -25,7 +28,24 @@ func (q *Queue) LockAndEnqueue(msg []byte) {
 	}
 }
 
-func (q *Queue) LockAndDequeueOrChannel() ([]byte, chan []byte) {
+func (q *Queue) LockAndDequeue(ctx context.Context) ([]byte, error) {
+	data, channel := q.lockAndDequeueOrChannel()
+	if channel == nil {
+		return data, nil
+	}
+	select {
+	case data := <-channel:
+		return data, nil
+	case <-ctx.Done():
+		// TODO: Figure out if there is a race-condition here with the context channel select and the queue lock being
+		// acquired. If a concurrent enqueue request acquires the lock between these operations, it can write a message
+		// to the  channel which will then be closed here.
+		q.lockAndDisconnect(channel)
+		return nil, ctx.Err()
+	}
+}
+
+func (q *Queue) lockAndDequeueOrChannel() ([]byte, chan []byte) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	if len(q.messages) > 0 {
@@ -38,7 +58,7 @@ func (q *Queue) LockAndDequeueOrChannel() ([]byte, chan []byte) {
 	return nil, channel
 }
 
-func (q *Queue) LockAndDisconnect(channel chan []byte) {
+func (q *Queue) lockAndDisconnect(channel chan []byte) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	channels := []chan []byte{}
@@ -48,5 +68,6 @@ func (q *Queue) LockAndDisconnect(channel chan []byte) {
 		}
 	}
 	q.channels = channels
+	// TODO: Maybe we should close the channel earlier to avoid any race-conditions. See note in LockAndDequeue.
 	close(channel)
 }
