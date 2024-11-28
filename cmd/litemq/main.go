@@ -8,7 +8,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/thekashifmalik/kandy/gen"
+	"github.com/thekashifmalik/litemq/gen"
 	"google.golang.org/grpc"
 )
 
@@ -33,7 +33,7 @@ func NewQueue(name string) *Queue {
 }
 
 func NewServer() *Server {
-	slog.Info("memq started")
+	slog.Info("litemq started")
 	return &Server{
 		queues: map[string]*Queue{},
 	}

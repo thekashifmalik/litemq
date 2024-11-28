@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "kast"
+name = "litemq"
 version = "0.1.0"
 description = ""
 authors = ["thekashifmalik <emailkashifmalik@gmail.com>"]
