@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'Z\005./gen',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rservice.proto\"-\n\x0e\x45nqueueRequest\x12\r\n\x05queue\x18\x01 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\"\t\n\x07Nothing\"\x18\n\x07QueueID\x12\r\n\x05queue\x18\x01 \x01(\t\"\x1c\n\x0bQueueLength\x12\r\n\x05\x63ount\x18\x01 \x01(\x03\"\x1f\n\x0f\x44\x65queueResponse\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x32\xc6\x01\n\x0cQueueService\x12&\n\x07\x45nqueue\x12\x0f.EnqueueRequest\x1a\x08.Nothing\"\x00\x12\'\n\x07\x44\x65queue\x12\x08.QueueID\x1a\x10.DequeueResponse\"\x00\x12!\n\x05Purge\x12\x08.QueueID\x1a\x0c.QueueLength\"\x00\x12\"\n\x06Length\x12\x08.QueueID\x1a\x0c.QueueLength\"\x00\x12\x1e\n\x06Health\x12\x08.Nothing\x1a\x08.Nothing\"\x00\x42\x07Z\x05./genb\x06proto3'
+  serialized_pb=b'\n\rservice.proto\"-\n\x0e\x45nqueueRequest\x12\r\n\x05queue\x18\x01 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\"\t\n\x07Nothing\"\x18\n\x07QueueID\x12\r\n\x05queue\x18\x01 \x01(\t\"\x1c\n\x0bQueueLength\x12\r\n\x05\x63ount\x18\x01 \x01(\x03\"\x1f\n\x0f\x44\x65queueResponse\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x32\xca\x01\n\x0cQueueService\x12*\n\x07\x45nqueue\x12\x0f.EnqueueRequest\x1a\x0c.QueueLength\"\x00\x12\'\n\x07\x44\x65queue\x12\x08.QueueID\x1a\x10.DequeueResponse\"\x00\x12!\n\x05Purge\x12\x08.QueueID\x1a\x0c.QueueLength\"\x00\x12\"\n\x06Length\x12\x08.QueueID\x1a\x0c.QueueLength\"\x00\x12\x1e\n\x06Health\x12\x08.Nothing\x1a\x08.Nothing\"\x00\x42\x07Z\x05./genb\x06proto3'
 )
 
 
@@ -237,7 +237,7 @@ _QUEUESERVICE = _descriptor.ServiceDescriptor(
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
   serialized_start=165,
-  serialized_end=363,
+  serialized_end=367,
   methods=[
   _descriptor.MethodDescriptor(
     name='Enqueue',
@@ -245,7 +245,7 @@ _QUEUESERVICE = _descriptor.ServiceDescriptor(
     index=0,
     containing_service=None,
     input_type=_ENQUEUEREQUEST,
-    output_type=_NOTHING,
+    output_type=_QUEUELENGTH,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),

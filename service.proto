@@ -3,7 +3,7 @@ syntax = "proto3";
 option go_package = "./gen";
 
 service QueueService {
-  rpc Enqueue (EnqueueRequest) returns (Nothing) {}
+  rpc Enqueue (EnqueueRequest) returns (QueueLength) {}
   rpc Dequeue (QueueID) returns (DequeueResponse) {}
   rpc Purge (QueueID) returns (QueueLength) {}
   rpc Length (QueueID) returns (QueueLength) {}

@@ -36,7 +36,7 @@ func NewServer() *Server {
 	}
 }
 
-func (s *Server) Enqueue(ctx context.Context, request *gen.EnqueueRequest) (*gen.Nothing, error) {
+func (s *Server) Enqueue(ctx context.Context, request *gen.EnqueueRequest) (*gen.QueueLength, error) {
 	slog.Info(fmt.Sprintf("ENQ %v '%v'", request.Queue, string(request.Data)))
 	queue := s.getOrCreateQueue(request.Queue)
 	queue.lock.Lock()
@@ -50,7 +50,7 @@ func (s *Server) Enqueue(ctx context.Context, request *gen.EnqueueRequest) (*gen
 	}
 	queue.lock.Unlock()
 
-	return &gen.Nothing{}, nil
+	return &gen.QueueLength{Count: int64(len(queue.data))}, nil
 }
 
 func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.DequeueResponse, error) {

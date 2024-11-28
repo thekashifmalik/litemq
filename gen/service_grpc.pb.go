@@ -30,7 +30,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type QueueServiceClient interface {
-	Enqueue(ctx context.Context, in *EnqueueRequest, opts ...grpc.CallOption) (*Nothing, error)
+	Enqueue(ctx context.Context, in *EnqueueRequest, opts ...grpc.CallOption) (*QueueLength, error)
 	Dequeue(ctx context.Context, in *QueueID, opts ...grpc.CallOption) (*DequeueResponse, error)
 	Purge(ctx context.Context, in *QueueID, opts ...grpc.CallOption) (*QueueLength, error)
 	Length(ctx context.Context, in *QueueID, opts ...grpc.CallOption) (*QueueLength, error)
@@ -45,9 +45,9 @@ func NewQueueServiceClient(cc grpc.ClientConnInterface) QueueServiceClient {
 	return &queueServiceClient{cc}
 }
 
-func (c *queueServiceClient) Enqueue(ctx context.Context, in *EnqueueRequest, opts ...grpc.CallOption) (*Nothing, error) {
+func (c *queueServiceClient) Enqueue(ctx context.Context, in *EnqueueRequest, opts ...grpc.CallOption) (*QueueLength, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Nothing)
+	out := new(QueueLength)
 	err := c.cc.Invoke(ctx, QueueService_Enqueue_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func (c *queueServiceClient) Health(ctx context.Context, in *Nothing, opts ...gr
 // All implementations must embed UnimplementedQueueServiceServer
 // for forward compatibility.
 type QueueServiceServer interface {
-	Enqueue(context.Context, *EnqueueRequest) (*Nothing, error)
+	Enqueue(context.Context, *EnqueueRequest) (*QueueLength, error)
 	Dequeue(context.Context, *QueueID) (*DequeueResponse, error)
 	Purge(context.Context, *QueueID) (*QueueLength, error)
 	Length(context.Context, *QueueID) (*QueueLength, error)
@@ -114,7 +114,7 @@ type QueueServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedQueueServiceServer struct{}
 
-func (UnimplementedQueueServiceServer) Enqueue(context.Context, *EnqueueRequest) (*Nothing, error) {
+func (UnimplementedQueueServiceServer) Enqueue(context.Context, *EnqueueRequest) (*QueueLength, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Enqueue not implemented")
 }
 func (UnimplementedQueueServiceServer) Dequeue(context.Context, *QueueID) (*DequeueResponse, error) {
