@@ -6,15 +6,15 @@ proto: protoc
 		--go_opt=paths=source_relative \
 		--go-grpc_out=gen \
 		--go-grpc_opt=paths=source_relative \
-		--python_out=gen \
-		--python_grpc_out=gen \
+		--python_out=litemq/gen \
+		--python_grpc_out=litemq/gen \
 		service.proto
 
 	@poetry run protol \
 		--in-place \
-    	--python-out gen \
+    	--python-out litemq/gen \
 		--module-suffixes _grpc.py \
-	  	protoc --proto-path=. --python_out=gen --python_grpc_out=gen service.proto
+	  	protoc --proto-path=. --python_out=litemq/gen --python_grpc_out=litemq/gen service.proto
 
 .PHONY: run
 run:

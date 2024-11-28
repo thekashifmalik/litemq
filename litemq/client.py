@@ -1,10 +1,9 @@
 from grpclib.client import Channel
 
-from gen.service_pb2 import EnqueueRequest
-from gen.service_pb2 import QueueID
-from gen.service_pb2 import Nothing
-from gen.service_grpc import LiteMQStub
-from gen.service_grpc import LiteMQBase
+from .gen.service_pb2 import EnqueueRequest
+from .gen.service_pb2 import QueueID
+from .gen.service_pb2 import Nothing
+from .gen.service_grpc import LiteMQStub
 
 
 class LiteMQ:
