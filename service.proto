@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option go_package = "./gen";
 
-service QueueService {
+service LiteMQ {
   rpc Enqueue (EnqueueRequest) returns (QueueLength) {}
   rpc Dequeue (QueueID) returns (DequeueResponse) {}
   rpc Purge (QueueID) returns (QueueLength) {}

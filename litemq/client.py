@@ -3,13 +3,14 @@ from grpclib.client import Channel
 from gen.service_pb2 import EnqueueRequest
 from gen.service_pb2 import QueueID
 from gen.service_pb2 import Nothing
-from gen.service_grpc import QueueServiceStub
+from gen.service_grpc import LiteMQStub
+from gen.service_grpc import LiteMQBase
 
 
 class LiteMQ:
 
     def __init__(self, channel: Channel):
-        self.stub = QueueServiceStub(channel)
+        self.stub = LiteMQStub(channel)
 
     async def enqueue(self, queue: str, data: bytes):
         request = EnqueueRequest(queue=queue, data=data)

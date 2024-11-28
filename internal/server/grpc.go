@@ -10,23 +10,20 @@ import (
 )
 
 type Server struct {
-	gen.UnimplementedQueueServiceServer
+	gen.UnimplementedLiteMQServer
 
 	queues map[string]*Queue
 	lock   sync.Mutex
 }
 
 type Queue struct {
-	name     string
 	data     [][]byte
 	channels []chan []byte
 	lock     sync.Mutex
 }
 
-func NewQueue(name string) *Queue {
-	return &Queue{
-		name: name,
-	}
+func NewQueue() *Queue {
+	return &Queue{}
 }
 
 func NewServer() *Server {
@@ -49,7 +46,6 @@ func (s *Server) Enqueue(ctx context.Context, request *gen.EnqueueRequest) (*gen
 		queue.data = append(queue.data, request.Data)
 	}
 	queue.lock.Unlock()
-
 	return &gen.QueueLength{Count: int64(len(queue.data))}, nil
 }
 
@@ -61,6 +57,7 @@ func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.Dequeu
 		data := queue.data[0]
 		queue.data = queue.data[1:]
 		queue.lock.Unlock()
+		slog.Debug(fmt.Sprintf("< %v bytes", int64(len(data))))
 		return &gen.DequeueResponse{Data: data}, nil
 	}
 	channel := make(chan []byte)
@@ -69,6 +66,7 @@ func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.Dequeu
 
 	select {
 	case data := <-channel:
+		slog.Debug(fmt.Sprintf("< %v bytes", int64(len(data))))
 		return &gen.DequeueResponse{Data: data}, nil
 	case <-ctx.Done():
 		// TODO: Figure out if there is a race-condition here with the context channel select and the queue lock being
@@ -84,18 +82,29 @@ func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.Dequeu
 		queue.channels = channels
 		queue.lock.Unlock()
 		close(channel)
+		slog.Debug("< disconnected")
 		return nil, ctx.Err()
 	}
 }
 
 func (s *Server) getOrCreateQueue(name string) *Queue {
-	s.lock.Lock()
 	queue, ok := s.queues[name]
 	if !ok {
-		queue = NewQueue(name)
+		queue = s.acquireLockAndCreateQueue(name)
+	}
+	return queue
+}
+
+func (s *Server) acquireLockAndCreateQueue(name string) *Queue {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	// Since another request could have created the queue while we were acquiring the lock, we need to check whether the
+	// queue exists, even if we checked just before calling this method.
+	queue, ok := s.queues[name]
+	if !ok {
+		queue = NewQueue()
 		s.queues[name] = queue
 	}
-	s.lock.Unlock()
 	return queue
 }
 
