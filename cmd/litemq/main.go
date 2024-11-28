@@ -7,7 +7,7 @@ import (
 	"net"
 
 	"github.com/thekashifmalik/litemq/gen"
-	"github.com/thekashifmalik/litemq/internal/server"
+	"github.com/thekashifmalik/litemq/internal"
 	"google.golang.org/grpc"
 )
 
@@ -17,7 +17,7 @@ func main() {
 		log.Fatalf(err.Error())
 	}
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	server := server.NewServer()
+	server := internal.NewServer()
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 	gen.RegisterLiteMQServer(grpcServer, server)
