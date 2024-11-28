@@ -27,7 +27,7 @@ func NewQueue() *Queue {
 }
 
 func NewServer() *Server {
-	slog.Info("litemq started")
+	slog.Info("LiteMQ started")
 	return &Server{
 		queues: map[string]*Queue{},
 	}
