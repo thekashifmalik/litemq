@@ -6,7 +6,7 @@ authors = ["thekashifmalik <emailkashifmalik@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12.3"
+python = ">=3.8,<4"
 grpcio = "^1.67.1"
 grpcio-tools = "^1.67.1"
 grpclib = "^0.4.7"
