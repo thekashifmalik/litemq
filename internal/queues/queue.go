@@ -1,4 +1,4 @@
-package internal
+package queues
 
 import (
 	"context"
@@ -70,4 +70,8 @@ func (q *Queue) lockAndDisconnect(channel chan []byte) {
 	q.channels = channels
 	// TODO: Maybe we should close the channel earlier to avoid any race-conditions. See note in LockAndDequeue.
 	close(channel)
+}
+
+func (q *Queue) Length() int {
+	return len(q.messages)
 }
