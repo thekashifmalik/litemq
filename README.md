@@ -1,7 +1,10 @@
-# litemq
-Simple and straightforward message queue.
+# LiteMQ
+Free & open source, high-performance, distributed message queue system, generic in nature, but intended for use in
+background task processing for dynamic web applications.
+
 
 ## Why
-Redis went rogue so I needed somethign to replace it's usage in my personal projects. Memcached works great as a cache
-and key/value store but it does not replace other data-structures. This software will replace my usage of Redis lists as
-message queues, somethibng I used for background tasks in Django.
+Redis [went rogue](https://www.reddit.com/r/redis/comments/1bjs7bo/redis_is_switching_away_from_opensource_licensing/)
+so I needed somethign to replace it. Memcached works great as a cache and key/value store but it does not replace other
+data-structures that Redis provided. This software will replace my usage of Redis lists as message queues, something I
+used for background task processing.
