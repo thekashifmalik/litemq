@@ -17,13 +17,52 @@ type Server struct {
 }
 
 type Queue struct {
-	data     [][]byte
+	messages [][]byte
 	channels []chan []byte
 	lock     sync.Mutex
 }
 
 func NewQueue() *Queue {
 	return &Queue{}
+}
+
+func (q *Queue) LockAndEnqueue(msg []byte) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	if len(q.channels) > 0 {
+		channel := q.channels[0]
+		q.channels = q.channels[1:]
+		channel <- msg
+		close(channel)
+	} else {
+		q.messages = append(q.messages, msg)
+	}
+}
+
+func (q *Queue) LockAndDequeueOrChannel() ([]byte, chan []byte) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	if len(q.messages) > 0 {
+		msg := q.messages[0]
+		q.messages = q.messages[1:]
+		return msg, nil
+	}
+	channel := make(chan []byte)
+	q.channels = append(q.channels, channel)
+	return nil, channel
+}
+
+func (q *Queue) LockAndDisconnect(channel chan []byte) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	channels := []chan []byte{}
+	for _, ch := range q.channels {
+		if ch != channel {
+			channels = append(channels, ch)
+		}
+	}
+	q.channels = channels
+	close(channel)
 }
 
 func NewServer() *Server {
@@ -34,36 +73,20 @@ func NewServer() *Server {
 }
 
 func (s *Server) Enqueue(ctx context.Context, request *gen.EnqueueRequest) (*gen.QueueLength, error) {
-	slog.Info(fmt.Sprintf("ENQ %v '%v'", request.Queue, string(request.Data)))
+	slog.Info(fmt.Sprintf("ENQUEUE %v '%v'", request.Queue, string(request.Data)))
 	queue := s.getOrCreateQueue(request.Queue)
-	queue.lock.Lock()
-	if len(queue.channels) > 0 {
-		channel := queue.channels[0]
-		queue.channels = queue.channels[1:]
-		channel <- request.Data
-		close(channel)
-	} else {
-		queue.data = append(queue.data, request.Data)
-	}
-	queue.lock.Unlock()
-	return &gen.QueueLength{Count: int64(len(queue.data))}, nil
+	queue.LockAndEnqueue(request.Data)
+	return &gen.QueueLength{Count: int64(len(queue.messages))}, nil
 }
 
 func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.DequeueResponse, error) {
-	slog.Info(fmt.Sprintf("DEQ %v", request.Queue))
+	slog.Info(fmt.Sprintf("DEQUEUE %v", request.Queue))
 	queue := s.getOrCreateQueue(request.Queue)
-	queue.lock.Lock()
-	if len(queue.data) > 0 {
-		data := queue.data[0]
-		queue.data = queue.data[1:]
-		queue.lock.Unlock()
+	data, channel := queue.LockAndDequeueOrChannel()
+	if channel == nil {
 		slog.Debug(fmt.Sprintf("< %v bytes", int64(len(data))))
 		return &gen.DequeueResponse{Data: data}, nil
 	}
-	channel := make(chan []byte)
-	queue.channels = append(queue.channels, channel)
-	queue.lock.Unlock()
-
 	select {
 	case data := <-channel:
 		slog.Debug(fmt.Sprintf("< %v bytes", int64(len(data))))
@@ -72,16 +95,7 @@ func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.Dequeu
 		// TODO: Figure out if there is a race-condition here with the context channel select and the queue lock being
 		// acquired. If a concurrent enqueue request acquires the lock between these operations, it can write a message
 		// to the  channel which will then be closed here.
-		queue.lock.Lock()
-		channels := []chan []byte{}
-		for _, ch := range queue.channels {
-			if ch != channel {
-				channels = append(channels, ch)
-			}
-		}
-		queue.channels = channels
-		queue.lock.Unlock()
-		close(channel)
+		queue.LockAndDisconnect(channel)
 		slog.Debug("< disconnected")
 		return nil, ctx.Err()
 	}
@@ -90,12 +104,12 @@ func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.Dequeu
 func (s *Server) getOrCreateQueue(name string) *Queue {
 	queue, ok := s.queues[name]
 	if !ok {
-		queue = s.acquireLockAndCreateQueue(name)
+		queue = s.lockAndCreateQueue(name)
 	}
 	return queue
 }
 
-func (s *Server) acquireLockAndCreateQueue(name string) *Queue {
+func (s *Server) lockAndCreateQueue(name string) *Queue {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	// Since another request could have created the queue while we were acquiring the lock, we need to check whether the
@@ -109,22 +123,23 @@ func (s *Server) acquireLockAndCreateQueue(name string) *Queue {
 }
 
 func (s *Server) Purge(ctx context.Context, request *gen.QueueID) (*gen.QueueLength, error) {
-	slog.Info(fmt.Sprintf("DEL %v", request.Queue))
+	slog.Info(fmt.Sprintf("PURGE %v", request.Queue))
 	s.lock.Lock()
 	length := 0
 	queue, ok := s.queues[request.Queue]
 	if ok {
 		delete(s.queues, request.Queue)
-		length = len(queue.data)
+		length = len(queue.messages)
+		// TODO: Need to delete any active dequeue channels for this purged queue.
 	}
 	s.lock.Unlock()
 	return &gen.QueueLength{Count: int64(length)}, nil
 }
 
 func (s *Server) Length(ctx context.Context, request *gen.QueueID) (*gen.QueueLength, error) {
-	slog.Info(fmt.Sprintf("LEN %v", request.Queue))
+	slog.Info(fmt.Sprintf("LENGTH %v", request.Queue))
 	queue, _ := s.queues[request.Queue]
-	return &gen.QueueLength{Count: int64(len(queue.data))}, nil
+	return &gen.QueueLength{Count: int64(len(queue.messages))}, nil
 }
 
 func (s *Server) Health(ctx context.Context, request *gen.Nothing) (*gen.Nothing, error) {
