@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"log/slog"
 	"net"
 
 	"github.com/thekashifmalik/litemq/gen"
@@ -16,7 +15,6 @@ func main() {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	slog.SetLogLoggerLevel(slog.LevelDebug)
 	server := internal.NewServer()
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)

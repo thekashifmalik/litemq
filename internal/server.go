@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
+	"time"
 
+	"github.com/lmittmann/tint"
 	"github.com/thekashifmalik/litemq/gen"
 	"github.com/thekashifmalik/litemq/internal/queues"
 )
@@ -18,6 +21,12 @@ type Server struct {
 }
 
 func NewServer() *Server {
+	slog.SetDefault(slog.New(
+		tint.NewHandler(os.Stderr, &tint.Options{
+			Level:      slog.LevelInfo,
+			TimeFormat: time.RFC3339,
+		}),
+	))
 	slog.Info("LiteMQ started")
 	return &Server{
 		queues: map[string]*queues.Queue{},
@@ -37,10 +46,10 @@ func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.Dequeu
 	queue := s.getOrCreateQueue(request.Queue)
 	data, err := queue.LockAndDequeue(ctx)
 	if err != nil {
-		slog.Debug("< disconnected")
+		slog.Info("< disconnected")
 		return nil, err
 	}
-	slog.Debug(fmt.Sprintf("< %v bytes", int64(len(data))))
+	slog.Info(fmt.Sprintf("< %v bytes", int64(len(data))))
 	return &gen.DequeueResponse{Data: data}, nil
 }
 
