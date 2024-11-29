@@ -4,14 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/lmittmann/tint"
 	"github.com/thekashifmalik/litemq/gen"
 	"github.com/thekashifmalik/litemq/internal/queues"
+	"google.golang.org/grpc"
 )
+
+const defaultPort = 42090
 
 type Server struct {
 	gen.UnimplementedLiteMQServer
@@ -32,11 +37,35 @@ func NewServer() *Server {
 			TimeFormat: time.RFC3339,
 		}),
 	))
-	slog.Info("LiteMQ started")
+	slog.Info("LiteMQ")
 	slog.Debug("debug logging enabled")
 	return &Server{
 		queues: map[string]*queues.Queue{},
 	}
+}
+
+func (s *Server) Serve() {
+	port := defaultPort
+	_port, ok := os.LookupEnv("PORT")
+	if ok {
+		var err error
+		port, err = strconv.Atoi(_port)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Invalid PORT value: %v", _port))
+			port = defaultPort
+		}
+	}
+	addr := fmt.Sprintf("0.0.0.0:%d", port)
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		slog.Error(err.Error())
+		return
+	}
+	var opts []grpc.ServerOption
+	grpcServer := grpc.NewServer(opts...)
+	gen.RegisterLiteMQServer(grpcServer, s)
+	slog.Info(fmt.Sprintf("listening on %v", addr))
+	grpcServer.Serve(lis)
 }
 
 func (s *Server) Enqueue(ctx context.Context, request *gen.EnqueueRequest) (*gen.QueueLength, error) {

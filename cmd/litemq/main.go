@@ -1,25 +1,12 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"net"
-
-	"github.com/thekashifmalik/litemq/gen"
 	"github.com/thekashifmalik/litemq/internal"
-	"google.golang.org/grpc"
 )
 
 func main() {
-	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", 42090))
-	if err != nil {
-		log.Fatalf(err.Error())
-	}
 	server := internal.NewServer()
-	var opts []grpc.ServerOption
-	grpcServer := grpc.NewServer(opts...)
-	gen.RegisterLiteMQServer(grpcServer, server)
-	grpcServer.Serve(lis)
+	server.Serve()
 }
 
 // mux := http.NewServeMux()
