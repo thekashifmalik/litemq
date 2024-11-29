@@ -21,13 +21,19 @@ type Server struct {
 }
 
 func NewServer() *Server {
+	logLevel := slog.LevelInfo
+	level, ok := os.LookupEnv("LOG_LEVEL")
+	if ok {
+		logLevel.UnmarshalText([]byte(level))
+	}
 	slog.SetDefault(slog.New(
 		tint.NewHandler(os.Stderr, &tint.Options{
-			Level:      slog.LevelInfo,
+			Level:      logLevel,
 			TimeFormat: time.RFC3339,
 		}),
 	))
 	slog.Info("LiteMQ started")
+	slog.Debug("debug logging enabled")
 	return &Server{
 		queues: map[string]*queues.Queue{},
 	}
@@ -46,7 +52,7 @@ func (s *Server) Dequeue(ctx context.Context, request *gen.QueueID) (*gen.Dequeu
 	queue := s.getOrCreateQueue(request.Queue)
 	data, err := queue.LockAndDequeue(ctx)
 	if err != nil {
-		slog.Info("< disconnected")
+		slog.Warn("< disconnected")
 		return nil, err
 	}
 	slog.Info(fmt.Sprintf("< %v bytes", int64(len(data))))
