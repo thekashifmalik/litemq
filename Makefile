@@ -42,3 +42,8 @@ go:
 .PHONY: python
 python:
 	@poetry install
+
+.PHONY: docker
+docker:
+	@docker build --tag thekashifmalik/litemq:latest  .
+	@docker push thekashifmalik/litemq:latest
