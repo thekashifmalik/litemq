@@ -31,6 +31,7 @@ You can set the following environment variables:
 
 
 ## Why
-Redis [went rogue](https://www.reddit.com/r/redis/comments/1bjs7bo/redis_is_switching_away_from_opensource_licensing/).
-[Memcached](https://memcached.org/) works great as a cache and key/value store but it does not provide an equivalent to
-Redis lists, which are often used as message queues for background task processing.
+While [Memcached](https://memcached.org/) works great as a cache and key/value store, it does not provide an equivalent
+to Redis lists, which are often used as message queues for background task processing. Redis [went rogue](https://www.reddit.com/r/redis/comments/1bjs7bo/redis_is_switching_away_from_opensource_licensing/)
+and while there are alternatives ([ValKey](https://valkey.io/), [RabbitMQ](https://www.rabbitmq.com/)), I wanted
+something lighter and more focussed.
