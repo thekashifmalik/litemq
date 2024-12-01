@@ -1,4 +1,4 @@
-# LiteMQ
+# litemq
 Free & open source message queue system, generic in nature, but intended for use in background task processing for web
 applications.
 
