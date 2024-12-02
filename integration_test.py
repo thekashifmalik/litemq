@@ -15,28 +15,22 @@ async def test_health(server):
 
 async def test_enqueue(server):
     client = new_client()
-    message = b'test-message'
-    length = await client.enqueue('test-1', message)
-    assert length == 1
+    assert await client.enqueue('test', b'message-1') == 1
+    assert await client.enqueue('test', b'message-2') == 2
 
 
 async def test_length(server):
     client = new_client()
-    length = await client.length('test-1')
-    assert length == 0
-    message = b'test-message'
-    length = await client.enqueue('test-1', message)
-    assert length == 1
-    length = await client.length('test-1')
-    assert length == 1
+    assert await client.length('test') == 0
+    await client.enqueue('test', b'message')
+    assert await client.length('test') == 1
 
 
 async def test_dequeue(server):
     client = new_client()
-    message = b'test-message'
-    await client.enqueue('test-1', message)
-    value = await client.dequeue('test-1')
-    assert value == message
+    message = b'message'
+    await client.enqueue('test', message)
+    assert await client.dequeue('test') == message
 
 
 async def test_dequeue_blocks(server):
@@ -45,12 +39,22 @@ async def test_dequeue_blocks(server):
         await asyncio.wait_for(client.dequeue('test-1'), timeout=0.1)
 
 
+async def test_dequeue_order(server):
+    client = new_client()
+    message_1 = b'message-1'
+    message_2 = b'message-2'
+    await client.enqueue('test', message_1)
+    await client.enqueue('test', message_2)
+    assert await client.dequeue('test') == message_1
+    assert await client.dequeue('test') == message_2
+
+
 @pytest.fixture()
 def server():
-    # We sleep here so that the server has enough time to give up the port between tests.
+    # Sleep here so the server has enough time to give up the port between tests.
     time.sleep(0.01)
     server = subprocess.Popen(["build/litemq"], env={"PORT": "42099"})
-    # We sleep here to give the server time to start before the tests run.
+    # Sleep here to give the server time to start before the tests run.
     time.sleep(0.01)
     yield
     server.kill()
