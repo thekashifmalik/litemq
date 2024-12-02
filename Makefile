@@ -23,11 +23,11 @@ run:
 .PHONY: build
 build: go
 	@go build -o build/litemq cmd/litemq/main.go
+	@echo "Binary built at build/litemq"
 
 .PHONY: client
 client: python
 	@PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run python main.py
-
 
 
 .PHONY: protoc
@@ -47,3 +47,17 @@ python:
 docker:
 	@docker build --tag thekashifmalik/litemq:latest  .
 	@docker push thekashifmalik/litemq:latest
+
+.PHONY: test
+test: unit integration
+	@echo "All tests passed"
+
+.PHONY: unit
+unit:
+	@go test -v ./...
+	@echo "Unit tests passed"
+
+.PHONY: integration
+integration: build
+	@PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run pytest -v
+	@echo "Integration tests passed"
