@@ -125,8 +125,11 @@ func (s *Server) Purge(ctx context.Context, request *gen.QueueID) (*gen.QueueLen
 
 func (s *Server) Length(ctx context.Context, request *gen.QueueID) (*gen.QueueLength, error) {
 	slog.Info(fmt.Sprintf("LENGTH %v", request.Queue))
-	queue, _ := s.queues[request.Queue]
-	length := queue.Length()
+	length := 0
+	queue, ok := s.queues[request.Queue]
+	if ok {
+		length = queue.Length()
+	}
 	return &gen.QueueLength{Count: int64(length)}, nil
 }
 
