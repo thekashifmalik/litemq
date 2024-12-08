@@ -1,6 +1,5 @@
-use std::borrow::Borrow;
 use std::error::Error;
-use std::sync::{Mutex, RwLock};
+use std::sync::RwLock;
 use std::collections::HashMap;
 
 
@@ -62,7 +61,7 @@ impl Server {
 #[tonic::async_trait]
 impl LiteMq for Server {
 
-    async fn health(&self, request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
+    async fn health(&self, _request: Request<Nothing>) -> Result<Response<Nothing>, Status> {
         log::info!("HEALTH");
         Ok(Response::new(Nothing::default()))
     }
