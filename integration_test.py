@@ -56,8 +56,10 @@ def server():
     server = subprocess.Popen(["build/litemq"], env={"PORT": "42099"})
     # Sleep here to give the server time to start before the tests run.
     time.sleep(0.01)
-    yield
-    server.kill()
+    try:
+        yield
+    finally:
+        server.kill()
 
 
 def new_client():
