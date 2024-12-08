@@ -16,8 +16,9 @@ use generated::EnqueueRequest;
 use generated::DequeueResponse;
 
 
+/// This module is populated by the build script and contains the generated protobufs & gRPC code.
 mod generated {
-    tonic::include_proto!("_"); // The string specified here must match the proto package name
+    tonic::include_proto!("_");
 }
 
 pub struct Server{
@@ -116,7 +117,21 @@ impl LiteMq for Server {
     }
 
     async fn purge(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
-        info!("{:?}", request);
-        Ok(Response::new(QueueLength::default()))
+        let r = request.into_inner();
+        log::info!("LENGTH {}", r.queue);
+        let count = match self.messages.write() {
+            Ok(mut messages) => {
+                match messages.remove(&r.queue) {
+                    Some(q) => q.len() as i64,
+                    None => 0,
+                }
+            }
+            Err(e) => {
+                // TODO: Maybe we sold fail the request here instead.
+                warn!("{}", e);
+                0
+            }
+        };
+        Ok(Response::new(QueueLength{count: count}))
     }
 }
