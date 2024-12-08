@@ -17,17 +17,24 @@ proto: protoc
 	  	protoc --proto-path=. --python_out=litemq/gen --python_grpc_out=litemq/gen service.proto
 
 .PHONY: run
-run:
+run: run-go
+
+.PHONY: run-go
+run-go:
 	@go run cmd/litemq/main.go
 
+.PHONY: run-rust
+run-rust:
+	@cargo run
+
 .PHONY: build
-build: go
+build: go rust
 	@go build -o build/litemq cmd/litemq/main.go
 	@echo "Binary built at build/litemq"
 
 .PHONY: client
 client: python
-	@PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run python main.py
+	@PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run python
 
 
 .PHONY: protoc
@@ -38,6 +45,10 @@ protoc:
 .PHONY: go
 go:
 	@go mod tidy
+
+.PHONY: rust
+rust:
+	@cargo build
 
 .PHONY: python
 python:
