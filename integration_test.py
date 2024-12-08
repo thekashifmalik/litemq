@@ -98,6 +98,14 @@ async def test_dequeue_order(server):
     assert await client.dequeue('test') == message_2
 
 
+async def test_purge(server):
+    client = new_client(server)
+    await client.enqueue('test', b'message')
+    assert await client.length('test') == 1
+    assert await client.purge('test') == 1
+    assert await client.length('test') == 0
+
+
 @pytest.fixture(params=['go', 'rust'])
 def server(request):
     # Sleep here so the server has enough time to give up the port between tests.
