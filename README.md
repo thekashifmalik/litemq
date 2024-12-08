@@ -35,3 +35,7 @@ While [Memcached](https://memcached.org/) works great as a cache and key/value s
 to Redis lists, which are often used as message queues for background task processing. Redis [went rogue](https://www.reddit.com/r/redis/comments/1bjs7bo/redis_is_switching_away_from_opensource_licensing/)
 and while there are alternatives ([ValKey](https://valkey.io/), [RabbitMQ](https://www.rabbitmq.com/)), I wanted
 something lighter and more focussed.
+
+## References
+- [Website](https://litemq.com/)
+- [Repository](https://github.com/thekashifmalik/litemq)
