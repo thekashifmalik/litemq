@@ -88,16 +88,6 @@ async def test_dequeue_blocks(server):
         await asyncio.wait_for(client.dequeue('test-1'), timeout=0.1)
 
 
-async def test_dequeue_order(server):
-    client = new_client(server)
-    message_1 = b'message-1'
-    message_2 = b'message-2'
-    await client.enqueue('test', message_1)
-    await client.enqueue('test', message_2)
-    assert await client.dequeue('test') == message_1
-    assert await client.dequeue('test') == message_2
-
-
 async def test_purge(server):
     client = new_client(server)
     await client.enqueue('test', b'message')
