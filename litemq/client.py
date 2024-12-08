@@ -7,6 +7,15 @@ from .gen.service_grpc import LiteMQStub
 
 
 class LiteMQ:
+    """
+    Example usage:
+
+        from grpclib.client import Channel
+        from litemq.client import LiteMQ
+
+        channel = Channel('localhost', 42069)
+        client = LiteMQ(channel)
+    """
 
     def __init__(self, channel: Channel):
         self.stub = LiteMQStub(channel)
