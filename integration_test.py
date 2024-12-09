@@ -88,6 +88,20 @@ async def test_dequeue_blocks(server):
         await asyncio.wait_for(client.dequeue('test-1'), timeout=0.1)
 
 
+async def test_concurrent(server):
+    """
+    This test is flakey, as are all tests for concurrency. If you run the server a couple of times this does catch
+    locking errors.
+    """
+    client = new_client(server)
+
+    async def task():
+        assert await client.enqueue('test-blocking', b'message') == 0
+
+    asyncio.create_task(task())
+    assert await client.dequeue('test-blocking') == b'message'
+
+
 async def test_purge(server):
     client = new_client(server)
     await client.enqueue('test', b'message')

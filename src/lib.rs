@@ -1,8 +1,8 @@
 use std::error::Error;
-use std::sync::RwLock;
 use std::collections::HashMap;
-use std::sync::mpsc::Sender;
-use std::sync::mpsc::Receiver;
+use tokio::sync::mpsc;
+use tokio::sync::RwLock;
+
 
 
 
@@ -29,12 +29,14 @@ pub struct Server{
 
 pub struct Queue{
     pub messages: Vec<Vec<u8>>,
+    pub channels: Vec<mpsc::Sender<Vec<u8>>>,
 }
 
 impl Queue {
     pub fn new() -> Self {
         Queue{
             messages: Vec::new(),
+            channels: Vec::new(),
         }
     }
 }
@@ -86,13 +88,7 @@ impl LiteMq for Server {
         let decoded = String::from_utf8(r.data.clone()).unwrap();
         log::info!("ENQUEUE {} \"{}\"", r.queue, decoded);
 
-        let mut queues = match self.queues.write() {
-            Ok(queues) => queues,
-            Err(e) => {
-                warn!("lock poisoned: {}", e);
-                e.into_inner()
-            }
-        };
+        let mut queues = self.queues.write().await;
         let queue = match queues.get_mut(&r.queue) {
             Some(q) => q,
             None => {
@@ -100,6 +96,19 @@ impl LiteMq for Server {
                 queues.get_mut(&r.queue).unwrap()
             }
         };
+        if queue.channels.len() > 0 {
+            let mut tx = queue.channels.remove(0);
+            // Currently the dequeuer is no cleaning up senders that are closed so we need to do it here.
+            while tx.is_closed() && queue.channels.len() > 0 {
+                tx = queue.channels.remove(0);
+            }
+            // If we found a valid channel, we can send the data and return the queue length.
+            if !tx.is_closed() {
+                tx.send(r.data).await.unwrap();
+                return Ok(Response::new(QueueLength{count: queue.messages.len() as i64}));
+            }
+        }
+        // If we did not find a valid channel, we need to put the data back into the queue.
         queue.messages.push(r.data);
         let count = queue.messages.len() as i64;
         Ok(Response::new(QueueLength{count: count}))
@@ -109,13 +118,7 @@ impl LiteMq for Server {
         let r = request.into_inner();
         info!("DEQUEUE {}", r.queue);
 
-        let mut queues = match self.queues.write() {
-            Ok(queues) => queues,
-            Err(e) => {
-                warn!("lock poisoned: {}", e);
-                e.into_inner()
-            }
-        };
+        let mut queues = self.queues.write().await;
         let queue = match queues.get_mut(&r.queue) {
             Some(q) => q,
             None => {
@@ -123,21 +126,29 @@ impl LiteMq for Server {
                 queues.get_mut(&r.queue).unwrap()
             }
         };
-        // TODO: Implement blocking reads using channels here.
-        let data = queue.messages.remove(0);
+        if queue.messages.len() > 0 {
+            let data = queue.messages.remove(0);
+            return Ok(Response::new(DequeueResponse{data: data}))
+        }
+        warn!("queue empty, waiting for data");
+        let (tx, mut rx) = mpsc::channel(1);
+        queue.channels.push(tx);
+        // Release the lock here manually to avoid a deadlock in the server
+        drop(queues);
+        let data = match rx.recv().await {
+            Some(data) => data,
+            None => {
+                warn!("> disconnected");
+                return Err(Status::unavailable("disconnected"));
+            }
+        };
         Ok(Response::new(DequeueResponse{data: data}))
     }
 
     async fn length(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
         info!("LENGTH {}", r.queue);
-        let queues = match self.queues.read() {
-            Ok(queues) => queues,
-            Err(e) => {
-                warn!("lock poisoned: {}", e);
-                e.into_inner()
-            }
-        };
+        let queues = self.queues.read().await;
         let count = match queues.get(&r.queue) {
             Some(q) => q.messages.len() as i64,
             None => 0,
@@ -148,13 +159,7 @@ impl LiteMq for Server {
     async fn purge(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
         info!("LENGTH {}", r.queue);
-        let mut queues = match self.queues.write() {
-            Ok(queues) => queues,
-            Err(e) => {
-                warn!("lock poisoned: {}", e);
-                e.into_inner()
-            }
-        };
+        let mut queues = self.queues.write().await;
         let count = match queues.remove(&r.queue) {
             Some(q) => q.messages.len() as i64,
             None => 0,
