@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::collections::HashMap;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
 
 
@@ -29,7 +30,7 @@ pub struct Server{
 
 pub struct Queue{
     pub messages: Vec<Vec<u8>>,
-    pub channels: Vec<mpsc::Sender<Vec<u8>>>,
+    pub channels: Vec<Sender<Vec<u8>>>,
 }
 
 impl Queue {
@@ -131,7 +132,7 @@ impl LiteMq for Server {
             return Ok(Response::new(DequeueResponse{data: data}))
         }
         warn!("queue empty, waiting for data");
-        let (tx, mut rx) = mpsc::channel(1);
+        let (tx, mut rx) = channel(1);
         queue.channels.push(tx);
         // Release the lock here manually to avoid a deadlock in the server
         drop(queues);
