@@ -34,8 +34,7 @@ build: go rust
 
 .PHONY: client
 client: python
-	@PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run python
-
+	@PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run python -m asyncio
 
 .PHONY: protoc
 protoc:
