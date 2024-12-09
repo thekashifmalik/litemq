@@ -1,6 +1,9 @@
 use std::error::Error;
 use std::sync::RwLock;
 use std::collections::HashMap;
+use std::sync::mpsc::Sender;
+use std::sync::mpsc::Receiver;
+
 
 
 use tonic::{transport, Request, Response, Status};
@@ -21,7 +24,19 @@ mod generated {
 }
 
 pub struct Server{
-    messages: RwLock<HashMap<String, Vec<Vec<u8>>>>
+    queues: RwLock<HashMap<String, Queue>>,
+}
+
+pub struct Queue{
+    pub messages: Vec<Vec<u8>>,
+}
+
+impl Queue {
+    pub fn new() -> Self {
+        Queue{
+            messages: Vec::new(),
+        }
+    }
 }
 
 impl Server {
@@ -30,7 +45,7 @@ impl Server {
         info!("LiteMQ");
     	debug!("debug logging enabled");
         Server{
-            messages: RwLock::new(HashMap::new()),
+            queues: RwLock::new(HashMap::new()),
         }
     }
 
@@ -71,42 +86,60 @@ impl LiteMq for Server {
         let decoded = String::from_utf8(r.data.clone()).unwrap();
         log::info!("ENQUEUE {} \"{}\"", r.queue, decoded);
 
-        let mut messages = match self.messages.write() {
-            Ok(messages) => messages,
+        let mut queues = match self.queues.write() {
+            Ok(queues) => queues,
             Err(e) => {
                 warn!("lock poisoned: {}", e);
                 e.into_inner()
             }
         };
-        let queue = match messages.get_mut(&r.queue) {
+        let queue = match queues.get_mut(&r.queue) {
             Some(q) => q,
             None => {
-                messages.insert(r.queue.clone(), Vec::new());
-                messages.get_mut(&r.queue).unwrap()
+                queues.insert(r.queue.clone(), Queue::new());
+                queues.get_mut(&r.queue).unwrap()
             }
         };
-        queue.push(r.data);
-        let count = queue.len() as i64;
+        queue.messages.push(r.data);
+        let count = queue.messages.len() as i64;
         Ok(Response::new(QueueLength{count: count}))
     }
 
     async fn dequeue(&self, request: Request<QueueId>) -> Result<Response<DequeueResponse>, Status> {
-        info!("{:?}", request);
-        Ok(Response::new(DequeueResponse::default()))
+        let r = request.into_inner();
+        info!("DEQUEUE {}", r.queue);
+
+        let mut queues = match self.queues.write() {
+            Ok(queues) => queues,
+            Err(e) => {
+                warn!("lock poisoned: {}", e);
+                e.into_inner()
+            }
+        };
+        let queue = match queues.get_mut(&r.queue) {
+            Some(q) => q,
+            None => {
+                queues.insert(r.queue.clone(), Queue::new());
+                queues.get_mut(&r.queue).unwrap()
+            }
+        };
+        // TODO: Implement blocking reads using channels here.
+        let data = queue.messages.remove(0);
+        Ok(Response::new(DequeueResponse{data: data}))
     }
 
     async fn length(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
         info!("LENGTH {}", r.queue);
-        let messages = match self.messages.read() {
-            Ok(messages) => messages,
+        let queues = match self.queues.read() {
+            Ok(queues) => queues,
             Err(e) => {
                 warn!("lock poisoned: {}", e);
                 e.into_inner()
             }
         };
-        let count = match messages.get(&r.queue) {
-            Some(q) => q.len() as i64,
+        let count = match queues.get(&r.queue) {
+            Some(q) => q.messages.len() as i64,
             None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
@@ -115,15 +148,15 @@ impl LiteMq for Server {
     async fn purge(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
         info!("LENGTH {}", r.queue);
-        let mut messages = match self.messages.write() {
-            Ok(messages) => messages,
+        let mut queues = match self.queues.write() {
+            Ok(queues) => queues,
             Err(e) => {
                 warn!("lock poisoned: {}", e);
                 e.into_inner()
             }
         };
-        let count = match messages.remove(&r.queue) {
-            Some(q) => q.len() as i64,
+        let count = match queues.remove(&r.queue) {
+            Some(q) => q.messages.len() as i64,
             None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
