@@ -70,24 +70,23 @@ impl LiteMq for Server {
         let r = request.into_inner();
         let decoded = String::from_utf8(r.data.clone()).unwrap();
         log::info!("ENQUEUE {} \"{}\"", r.queue, decoded);
-        let count;
-        match self.messages.write() {
-            Ok(mut messages) => {
-                let queue = match messages.get_mut(&r.queue) {
-                    Some(q) => q,
-                    None => {
-                        messages.insert(r.queue.clone(), Vec::new());
-                        messages.get_mut(&r.queue).unwrap()
-                    }
-                };
-                queue.push(r.data);
-                count = queue.len() as i64;
-            }
+
+        let mut messages = match self.messages.write() {
+            Ok(messages) => messages,
             Err(e) => {
-                error!("{}", e);
-                return Err(Status::internal("failed to lock messages"));
+                warn!("lock poisoned: {}", e);
+                e.into_inner()
             }
-        }
+        };
+        let queue = match messages.get_mut(&r.queue) {
+            Some(q) => q,
+            None => {
+                messages.insert(r.queue.clone(), Vec::new());
+                messages.get_mut(&r.queue).unwrap()
+            }
+        };
+        queue.push(r.data);
+        let count = queue.len() as i64;
         Ok(Response::new(QueueLength{count: count}))
     }
 
@@ -98,38 +97,34 @@ impl LiteMq for Server {
 
     async fn length(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
-        log::info!("LENGTH {}", r.queue);
-        let count = match self.messages.read() {
-            Ok(messages) => {
-                match messages.get(&r.queue) {
-                    Some(q) => q.len() as i64,
-                    None => 0,
-                }
-            }
+        info!("LENGTH {}", r.queue);
+        let messages = match self.messages.read() {
+            Ok(messages) => messages,
             Err(e) => {
-                // TODO: Maybe we sold fail the request here instead.
-                warn!("{}", e);
-                0
+                warn!("lock poisoned: {}", e);
+                e.into_inner()
             }
+        };
+        let count = match messages.get(&r.queue) {
+            Some(q) => q.len() as i64,
+            None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
     }
 
     async fn purge(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
-        log::info!("LENGTH {}", r.queue);
-        let count = match self.messages.write() {
-            Ok(mut messages) => {
-                match messages.remove(&r.queue) {
-                    Some(q) => q.len() as i64,
-                    None => 0,
-                }
-            }
+        info!("LENGTH {}", r.queue);
+        let mut messages = match self.messages.write() {
+            Ok(messages) => messages,
             Err(e) => {
-                // TODO: Maybe we sold fail the request here instead.
-                warn!("{}", e);
-                0
+                warn!("lock poisoned: {}", e);
+                e.into_inner()
             }
+        };
+        let count = match messages.remove(&r.queue) {
+            Some(q) => q.len() as i64,
+            None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
     }
