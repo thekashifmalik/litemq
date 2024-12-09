@@ -20,7 +20,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip poetry
-      - uses: arduino/setup-protoc@v3
-        with:
-          version: "12.4"
+      - run: sudo apt install -y protobuf-compiler libprotobuf-dev
       - run: make test
