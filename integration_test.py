@@ -2,6 +2,8 @@ import time
 import subprocess
 import asyncio
 import pytest
+import pytest_asyncio
+import nest_asyncio
 from grpclib.client import Channel
 
 from litemq.client import LiteMQ
@@ -88,6 +90,14 @@ async def test_dequeue_blocks(server):
         await asyncio.wait_for(client.dequeue('test-1'), timeout=0.1)
 
 
+async def test_purge(server):
+    client = new_client(server)
+    await client.enqueue('test', b'message')
+    assert await client.length('test') == 1
+    assert await client.purge('test') == 1
+    assert await client.length('test') == 0
+
+
 async def test_concurrent(server):
     """
     This test is flakey, as are all tests for concurrency. If you run the server a couple of times this does catch
@@ -102,12 +112,10 @@ async def test_concurrent(server):
     assert await client.dequeue('test-blocking') == b'message'
 
 
-async def test_purge(server):
+async def test_performance(server, aio_benchmark):
     client = new_client(server)
-    await client.enqueue('test', b'message')
-    assert await client.length('test') == 1
-    assert await client.purge('test') == 1
-    assert await client.length('test') == 0
+    aio_benchmark(client.enqueue, 'test-benchmark', b'message')
+    assert await client.length('test-benchmark') > 100
 
 
 @pytest.fixture(params=['go', 'rust'])
@@ -131,4 +139,23 @@ def new_client(param):
         channel = Channel('127.0.0.1', 42069)
     else:
         channel = Channel('127.0.0.1', 42099)
+
     return LiteMQ(channel)
+
+
+# COPYPASTA: https://github.com/ionelmc/pytest-benchmark/issues/66#issuecomment-1137005280
+# This is a workaround for the pytest-benchmark not supporting async functions.
+@pytest_asyncio.fixture
+async def aio_benchmark(benchmark):
+    nest_asyncio.apply()
+
+    def _wrapper(func, *args, **kwargs):
+        if asyncio.iscoroutinefunction(func):
+            @benchmark
+            def _():
+                return asyncio.run(func(*args, **kwargs))
+                # return event_loop.run_until_complete(func(*args, **kwargs))
+        else:
+            benchmark(func, *args, **kwargs)
+
+    return _wrapper
