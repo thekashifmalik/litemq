@@ -69,6 +69,6 @@ unit:
 	@echo "Unit tests passed"
 
 .PHONY: integration
-integration: build
+integration: python build
 	@PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run pytest -v
 	@echo "Integration tests passed"
