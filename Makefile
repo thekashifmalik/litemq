@@ -65,6 +65,7 @@ test: unit integration
 .PHONY: unit
 unit:
 	@go test -v ./...
+	@cargo test
 	@echo "Unit tests passed"
 
 .PHONY: integration

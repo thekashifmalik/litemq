@@ -119,7 +119,7 @@ def server(request):
     else:
         server = subprocess.Popen(["build/litemq"], env={"PORT": "42099"})
     # Sleep here to give the server time to start before the tests run.
-    time.sleep(0.01)
+    time.sleep(0.02)
     try:
         yield request.param
     finally:
