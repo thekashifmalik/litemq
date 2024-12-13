@@ -57,18 +57,3 @@ python:
 docker:
 	@docker build --tag thekashifmalik/litemq:latest  .
 	@docker push thekashifmalik/litemq:latest
-
-.PHONY: test
-test: unit integration
-	@echo "All tests passed"
-
-.PHONY: unit
-unit:
-	@go test -v ./...
-	@cargo test
-	@echo "Unit tests passed"
-
-.PHONY: integration
-integration: python build
-	@PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run pytest -v
-	@echo "Integration tests passed"

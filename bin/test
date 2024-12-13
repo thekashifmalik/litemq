@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+# Run unit tests.
+go test -v ./...
+cargo test
+echo "Unit tests passed"
+
+# Run integration tests.
+PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run pytest -v
+echo "Integration tests passed"
+
+echo "All tests passed"
