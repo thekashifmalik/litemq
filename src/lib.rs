@@ -45,7 +45,7 @@ impl Queue {
 
 impl Server {
     pub fn new() -> Self {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).format_target(false).init();
+        env_logger::Builder::from_env(env_logger::Env::default().filter_or("LOG_LEVEL", "info")).format_target(false).init();
         info!("LiteMQ");
     	debug!("debug logging enabled");
         Server{
