@@ -118,14 +118,20 @@ async def test_performance(server, aio_benchmark):
     assert await client.length('test-benchmark') > 100
 
 
+TEST_PORT = 42099
+TEST_ENV = {
+    'PORT': str(TEST_PORT),
+}
+
+
 @pytest.fixture(params=['go', 'rust'])
 def server(request):
     # Sleep here so the server has enough time to give up the port between tests.
     time.sleep(0.01)
     if request.param == 'rust':
-        server = subprocess.Popen(["target/debug/litemq"])
+        server = subprocess.Popen(["target/debug/litemq"], env=TEST_ENV)
     else:
-        server = subprocess.Popen(["build/litemq"], env={"PORT": "42099"})
+        server = subprocess.Popen(["build/litemq"], env=TEST_ENV)
     # Sleep here to give the server time to start before the tests run.
     time.sleep(0.02)
     try:
@@ -136,9 +142,9 @@ def server(request):
 
 def new_client(param):
     if param == 'rust':
-        channel = Channel('127.0.0.1', 42069)
+        channel = Channel('127.0.0.1', TEST_PORT)
     else:
-        channel = Channel('127.0.0.1', 42099)
+        channel = Channel('127.0.0.1', TEST_PORT)
 
     return LiteMQ(channel)
 

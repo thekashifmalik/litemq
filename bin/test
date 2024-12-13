@@ -6,7 +6,12 @@ go test -v ./...
 cargo test
 echo "Unit tests passed"
 
+
 # Run integration tests.
+go mod tidy
+go build -o build/litemq cmd/litemq/main.go
+cargo build
+poetry install
 PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run pytest -v
 echo "Integration tests passed"
 
