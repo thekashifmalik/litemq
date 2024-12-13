@@ -27,7 +27,7 @@ docker run --rm -it -p 42090:42090 thekashifmalik/litemq:latest
 You can set the following environment variables:
 
 - `PORT`: Change the port the server uses.
-- `LOG_LEVEL` Set to `debug` to enable debug logging. Uses Go log levels.
+- `LOG_LEVEL` Set to `debug` to enable debug logging.
 
 
 ## Why
