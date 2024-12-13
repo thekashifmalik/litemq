@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 use std::collections::HashMap;
 use tokio::sync::mpsc::Sender;
@@ -53,7 +54,19 @@ impl Server {
     }
 
     pub async fn serve(self) {
-        let addr = match "0.0.0.0:42069".parse() {
+        let mut port = 42090;
+        if let Ok(_port) = env::var("PORT") {
+            match _port.parse::<u16>() {
+                Ok(p) => {
+                    port = p;
+                }
+                Err(e) => {
+                    warn!("invalid PORT: {}", e);
+                }
+            }
+        }
+
+        let addr = match format!("0.0.0.0:{}", port).parse() {
             Ok(addr) => addr,
             Err(e) => {
                 error!("{}", e);
@@ -61,7 +74,7 @@ impl Server {
             }
         };
 
-        info!("binding to {}", addr);
+        info!("listening on {}", addr);
 
         match transport::Server::builder()
             .add_service(LiteMqServer::new(self))
