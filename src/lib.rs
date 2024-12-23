@@ -152,7 +152,7 @@ impl LiteMq for Server {
             debug!("< {} bytes", data.len());
             return Ok(Response::new(DequeueResponse{data: data}))
         }
-        warn!("queue empty, waiting for data");
+        debug!("queue empty, waiting for data");
         let (tx, mut rx) = channel(1);
         queue.channels.push(tx);
         // Release the queue lock here to avoid a deadlock
@@ -165,6 +165,7 @@ impl LiteMq for Server {
                 return Err(Status::unavailable("disconnected"));
             }
         };
+        debug!("< {} bytes", data.len());
         Ok(Response::new(DequeueResponse{data: data}))
     }
 
