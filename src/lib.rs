@@ -149,6 +149,7 @@ impl LiteMq for Server {
         let mut queue = queue_mutex.lock().await;
         if queue.messages.len() > 0 {
             let data = queue.messages.remove(0);
+            debug!("< {} bytes", data.len());
             return Ok(Response::new(DequeueResponse{data: data}))
         }
         warn!("queue empty, waiting for data");
