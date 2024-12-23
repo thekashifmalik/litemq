@@ -99,17 +99,16 @@ async def test_purge(server):
 
 
 async def test_concurrent(server):
-    """
-    This test is flakey, as are all tests for concurrency. If you run the server a couple of times this does catch
-    locking errors.
-    """
     client = new_client(server)
 
     async def task():
         assert await client.enqueue('test-blocking', b'message') == 0
 
-    asyncio.create_task(task())
-    assert await client.dequeue('test-blocking') == b'message'
+    # This test is flakey, as are all tests for concurrency. We run it a couple of time since it does reliably catch
+    # errors.
+    for _ in range(100):
+        asyncio.create_task(task())
+        assert await client.dequeue('test-blocking') == b'message'
 
 
 async def test_performance(server, aio_benchmark):
@@ -129,7 +128,7 @@ def server(request):
     # Sleep here so the server has enough time to give up the port between tests.
     time.sleep(0.01)
     if request.param == 'rust':
-        server = subprocess.Popen(["target/debug/litemq"], env=TEST_ENV)
+        server = subprocess.Popen(["target/release/litemq"], env=TEST_ENV)
     else:
         server = subprocess.Popen(["build/litemq"], env=TEST_ENV)
     # Sleep here to give the server time to start before the tests run.
