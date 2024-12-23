@@ -160,9 +160,8 @@ impl LiteMq for Server {
         let data = match rx.recv().await {
             Some(data) => data,
             None => {
-                // TODO: This does not detect client disconnects. Figure out how to do that.
-                warn!("> disconnected");
-                return Err(Status::unavailable("disconnected"));
+                error!("no data received");
+                return Err(Status::internal("no data received"));
             }
         };
         debug!("< {} bytes", data.len());
