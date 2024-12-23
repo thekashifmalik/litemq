@@ -3,8 +3,8 @@ use std::error::Error;
 use std::collections::HashMap;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::channel;
-use tokio::sync::RwLock;
-
+use tokio::sync::Mutex;
+use std::sync::Arc;
 
 
 
@@ -26,7 +26,7 @@ mod generated {
 }
 
 pub struct Server{
-    queues: RwLock<HashMap<String, Queue>>,
+    queues: Mutex<HashMap<String, Arc<Mutex<Queue>>>>,
 }
 
 pub struct Queue{
@@ -49,7 +49,7 @@ impl Server {
         info!("LiteMQ");
     	debug!("debug logging enabled");
         Server{
-            queues: RwLock::new(HashMap::new()),
+            queues: Mutex::new(HashMap::new()),
         }
     }
 
@@ -102,17 +102,21 @@ impl LiteMq for Server {
         let decoded = String::from_utf8(r.data.clone()).unwrap();
         log::info!("ENQUEUE {} \"{}\"", r.queue, decoded);
 
-        let mut queues = self.queues.write().await;
-        let queue = match queues.get_mut(&r.queue) {
-            Some(q) => q,
+        let mut queues = self.queues.lock().await;
+        let queue_mutex = match queues.get(&r.queue) {
+            Some(q) => q.clone(),
             None => {
-                queues.insert(r.queue.clone(), Queue::new());
-                queues.get_mut(&r.queue).unwrap()
+                let q = Arc::new(Mutex::new(Queue::new()));
+                queues.insert(r.queue.clone(), q.clone());
+                q
             }
         };
+        // Release the server lock here.
+        drop(queues);
+        let mut queue = queue_mutex.lock().await;
         if queue.channels.len() > 0 {
             let mut tx = queue.channels.remove(0);
-            // Currently the dequeuer is no cleaning up senders that are closed so we need to do it here.
+            // Currently dequeue is not cleaning up senders that are closed so we need to do it here.
             while tx.is_closed() && queue.channels.len() > 0 {
                 tx = queue.channels.remove(0);
             }
@@ -122,7 +126,7 @@ impl LiteMq for Server {
                 return Ok(Response::new(QueueLength{count: queue.messages.len() as i64}));
             }
         }
-        // If we did not find a valid channel, we need to put the data back into the queue.
+        // If we did not find a valid channel, we need to put the data into the queue.
         queue.messages.push(r.data);
         let count = queue.messages.len() as i64;
         Ok(Response::new(QueueLength{count: count}))
@@ -132,14 +136,17 @@ impl LiteMq for Server {
         let r = request.into_inner();
         info!("DEQUEUE {}", r.queue);
 
-        let mut queues = self.queues.write().await;
-        let queue = match queues.get_mut(&r.queue) {
-            Some(q) => q,
+        let mut queues = self.queues.lock().await;
+        let queue_mutex = match queues.get(&r.queue) {
+            Some(q) => q.clone(),
             None => {
-                queues.insert(r.queue.clone(), Queue::new());
-                queues.get_mut(&r.queue).unwrap()
+                queues.insert(r.queue.clone(), Arc::new(Mutex::new(Queue::new())));
+                queues.get(&r.queue).unwrap().clone()
             }
         };
+        // Release the server lock here.
+        drop(queues);
+        let mut queue = queue_mutex.lock().await;
         if queue.messages.len() > 0 {
             let data = queue.messages.remove(0);
             return Ok(Response::new(DequeueResponse{data: data}))
@@ -147,8 +154,8 @@ impl LiteMq for Server {
         warn!("queue empty, waiting for data");
         let (tx, mut rx) = channel(1);
         queue.channels.push(tx);
-        // Release the lock here manually to avoid a deadlock in the server
-        drop(queues);
+        // Release the queue lock here to avoid a deadlock
+        drop(queue);
         let data = match rx.recv().await {
             Some(data) => data,
             None => {
@@ -163,9 +170,9 @@ impl LiteMq for Server {
     async fn length(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
         info!("LENGTH {}", r.queue);
-        let queues = self.queues.read().await;
+        let queues = self.queues.lock().await;
         let count = match queues.get(&r.queue) {
-            Some(q) => q.messages.len() as i64,
+            Some(q) => q.lock().await.messages.len() as i64,
             None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
@@ -174,9 +181,9 @@ impl LiteMq for Server {
     async fn purge(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
         info!("LENGTH {}", r.queue);
-        let mut queues = self.queues.write().await;
+        let mut queues = self.queues.lock().await;
         let count = match queues.remove(&r.queue) {
-            Some(q) => q.messages.len() as i64,
+            Some(q) => q.lock().await.messages.len() as i64,
             None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
