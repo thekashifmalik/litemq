@@ -122,11 +122,13 @@ impl LiteMq for Server {
             }
             // If we found a valid channel, we can send the data and return the queue length.
             if !tx.is_closed() {
+                debug!("* {} bytes", r.data.len());
                 tx.send(r.data).await.unwrap();
                 return Ok(Response::new(QueueLength{count: queue.messages.len() as i64}));
             }
         }
         // If we did not find a valid channel, we need to put the data into the queue.
+        debug!("> {} bytes", r.data.len());
         queue.messages.push(r.data);
         let count = queue.messages.len() as i64;
         Ok(Response::new(QueueLength{count: count}))
@@ -152,7 +154,6 @@ impl LiteMq for Server {
             debug!("< {} bytes", data.len());
             return Ok(Response::new(DequeueResponse{data: data}))
         }
-        debug!("queue empty, waiting for data");
         let (tx, mut rx) = channel(1);
         queue.channels.push(tx);
         // Release the queue lock here to avoid a deadlock
@@ -164,7 +165,6 @@ impl LiteMq for Server {
                 return Err(Status::internal("no data received"));
             }
         };
-        debug!("< {} bytes", data.len());
         Ok(Response::new(DequeueResponse{data: data}))
     }
 
