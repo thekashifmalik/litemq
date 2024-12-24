@@ -10,4 +10,4 @@ COPY src src
 COPY build.rs build.rs
 COPY service.proto service.proto
 RUN cargo build --release
-CMD [ "target/debug/litemq" ]
+CMD [ "target/release/litemq" ]
