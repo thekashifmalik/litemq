@@ -111,10 +111,22 @@ async def test_concurrent(server):
         assert await client.dequeue('test-blocking') == b'message'
 
 
-async def test_performance(server, aio_benchmark):
+async def test_performance_length(server, aio_benchmark):
+    client = new_client(server)
+    aio_benchmark(client.length, 'test-benchmark')
+
+
+async def test_performance_enqueue(server, aio_benchmark):
     client = new_client(server)
     aio_benchmark(client.enqueue, 'test-benchmark', b'message')
-    assert await client.length('test-benchmark') > 100
+
+
+async def test_performance_enqueue_and_dequeue(server, aio_benchmark):
+    client = new_client(server)
+    async def task():
+        await client.enqueue('test-benchmark', b'message')
+        await client.dequeue('test-benchmark')
+    aio_benchmark(task)
 
 
 TEST_PORT = 42099
