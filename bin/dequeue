@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+QUEUE="$1"
+grpcurl -plaintext -proto=service.proto -d '{"queue": "'$QUEUE'"}' localhost:42090 LiteMQ.Dequeue | jq -r '.data' | base64 -d
+echo
