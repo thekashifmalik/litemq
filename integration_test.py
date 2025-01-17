@@ -43,6 +43,11 @@ async def test_enqueue_different_queues_multiple(server):
     assert await client.enqueue('test-2', b'message-2') == 2
 
 
+async def test_enqueue_large(server):
+    client = new_client(server)
+    assert await client.enqueue('test', b'message' * 1000) == 1
+
+
 async def test_length(server):
     client = new_client(server)
     assert await client.length('test') == 0
@@ -119,6 +124,11 @@ async def test_performance_length(server, aio_benchmark):
 async def test_performance_enqueue(server, aio_benchmark):
     client = new_client(server)
     aio_benchmark(client.enqueue, 'test-benchmark', b'message')
+
+
+async def test_performance_enqueue_large(server, aio_benchmark):
+    client = new_client(server)
+    aio_benchmark(client.enqueue, 'test-benchmark', b'message' * 1000)
 
 
 async def test_performance_enqueue_and_dequeue(server, aio_benchmark):
