@@ -1,3 +1,5 @@
+.PHONY: run
+run: litemq
 
 .PHONY: proto
 proto: protoc
@@ -16,8 +18,9 @@ proto: protoc
 		--module-suffixes _grpc.py \
 	  	protoc --proto-path=. --python_out=litemq/gen --python_grpc_out=litemq/gen service.proto
 
-.PHONY: run
-run: run-go
+
+.PHONY: litemq
+litemq: run-rust
 
 .PHONY: run-go
 run-go:
