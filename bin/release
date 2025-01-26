@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+docker build --tag thekashifmalik/litemq:latest  .
+docker push thekashifmalik/litemq:latest

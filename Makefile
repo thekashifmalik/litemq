@@ -1,6 +1,3 @@
-.PHONY: run
-run: litemq
-
 .PHONY: proto
 proto: protoc
 	@poetry run protoc \
@@ -18,17 +15,9 @@ proto: protoc
 		--module-suffixes _grpc.py \
 	  	protoc --proto-path=. --python_out=litemq/gen --python_grpc_out=litemq/gen service.proto
 
-
-.PHONY: litemq
-litemq: run-rust
-
 .PHONY: run-go
 run-go:
 	@go run cmd/litemq/main.go
-
-.PHONY: run-rust
-run-rust:
-	@cargo run
 
 .PHONY: build
 build: go rust
@@ -55,8 +44,3 @@ rust:
 .PHONY: python
 python:
 	@poetry install
-
-.PHONY: docker
-docker:
-	@docker build --tag thekashifmalik/litemq:latest  .
-	@docker push thekashifmalik/litemq:latest
