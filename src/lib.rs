@@ -42,6 +42,11 @@ impl Queue {
         }
     }
 }
+impl Queue {
+    pub fn length(&self) -> i64 {
+        self.messages.len() as i64
+    }
+}
 
 impl Server {
     pub fn new() -> Self {
@@ -124,14 +129,13 @@ impl LiteMq for Server {
             if !tx.is_closed() {
                 debug!("* {} bytes", r.data.len());
                 tx.send(r.data).await.unwrap();
-                return Ok(Response::new(QueueLength{count: queue.messages.len() as i64}));
+                return Ok(Response::new(QueueLength{count: queue.length()}));
             }
         }
         // If we did not find a valid channel, we need to put the data into the queue.
         debug!("> {} bytes", r.data.len());
         queue.messages.push(r.data);
-        let count = queue.messages.len() as i64;
-        Ok(Response::new(QueueLength{count: count}))
+        Ok(Response::new(QueueLength{count: queue.length()}))
     }
 
     async fn dequeue(&self, request: Request<QueueId>) -> Result<Response<DequeueResponse>, Status> {
@@ -149,7 +153,7 @@ impl LiteMq for Server {
         // Release the server lock here.
         drop(queues);
         let mut queue = queue_mutex.lock().await;
-        if queue.messages.len() > 0 {
+        if queue.length() > 0 {
             let data = queue.messages.remove(0);
             debug!("< {} bytes", data.len());
             return Ok(Response::new(DequeueResponse{data: data}))
@@ -174,7 +178,7 @@ impl LiteMq for Server {
         info!("LENGTH {}", r.queue);
         let queues = self.queues.lock().await;
         let count = match queues.get(&r.queue) {
-            Some(q) => q.lock().await.messages.len() as i64,
+            Some(q) => q.lock().await.length(),
             None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
@@ -185,7 +189,7 @@ impl LiteMq for Server {
         info!("LENGTH {}", r.queue);
         let mut queues = self.queues.lock().await;
         let count = match queues.remove(&r.queue) {
-            Some(q) => q.lock().await.messages.len() as i64,
+            Some(q) => q.lock().await.length(),
             None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
