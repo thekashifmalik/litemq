@@ -158,6 +158,7 @@ impl LiteMq for Server {
         queue.channels.push(tx);
         // Release the queue lock here to avoid a deadlock
         drop(queue);
+        debug!("* waiting");
         let data = match rx.recv().await {
             Some(data) => data,
             None => {
