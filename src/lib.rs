@@ -16,7 +16,7 @@ use generated::QueueId;
 use generated::QueueLength;
 use generated::EnqueueRequest;
 use generated::DequeueResponse;
-use queues::Queue;
+use queues::ThreadSafeQueue;
 
 mod queues;
 
@@ -26,7 +26,7 @@ mod generated {
 }
 
 pub struct Server{
-    queues: Mutex<HashMap<String, Arc<Mutex<Queue>>>>,
+    queues: Mutex<HashMap<String, Arc<ThreadSafeQueue>>>,
 }
 
 
@@ -66,14 +66,27 @@ impl Server {
         match transport::Server::builder()
             .add_service(LiteMqServer::new(self))
             .serve(addr).await {
-                Err(e) => {
-                    let underlying_error = e.source().unwrap();
-                    error!("{}: {}", e, underlying_error);
-                    return
-                }
-                _ => ()
-            };
+            Err(e) => {
+                let underlying_error = e.source().unwrap();
+                error!("{}: {}", e, underlying_error);
+                return
+            }
+            _ => ()
+        };
+    }
+
+    async fn lock_and_get_or_create_queue(&self, name: &str) -> Arc<ThreadSafeQueue> {
+        let mut queues = self.queues.lock().await;
+        match queues.get(name) {
+            Some(q) => q.clone(),
+            None => {
+                let q = Arc::new(ThreadSafeQueue::new());
+                queues.insert(name.to_string(), q.clone());
+                q
+            }
         }
+    }
+
 }
 
 #[tonic::async_trait]
@@ -89,19 +102,8 @@ impl LiteMq for Server {
         let decoded = String::from_utf8(r.data.clone()).unwrap();
         log::info!("ENQUEUE {} \"{}\"", r.queue, decoded);
 
-        let mut queues = self.queues.lock().await;
-        let queue_mutex = match queues.get(&r.queue) {
-            Some(q) => q.clone(),
-            None => {
-                let q = Arc::new(Mutex::new(Queue::new()));
-                queues.insert(r.queue.clone(), q.clone());
-                q
-            }
-        };
-        // Release the server lock here.
-        drop(queues);
-        let mut queue = queue_mutex.lock().await;
-        let length = queue.enqueue(r.data).await;
+        let queue = self.lock_and_get_or_create_queue(&r.queue).await;
+        let length = queue.lock_and_enqueue(r.data).await;
         Ok(Response::new(QueueLength{count: length}))
     }
 
@@ -109,25 +111,13 @@ impl LiteMq for Server {
         let r = request.into_inner();
         info!("DEQUEUE {}", r.queue);
 
-        let mut queues = self.queues.lock().await;
-        let queue_mutex = match queues.get(&r.queue) {
-            Some(q) => q.clone(),
-            None => {
-                queues.insert(r.queue.clone(), Arc::new(Mutex::new(Queue::new())));
-                queues.get(&r.queue).unwrap().clone()
-            }
-        };
-        // Release the server lock here.
-        drop(queues);
-        let mut queue = queue_mutex.lock().await;
-        let mut rx = match queue.dequeue_or_receiver() {
+        let queue = self.lock_and_get_or_create_queue(&r.queue).await;
+        let mut rx = match queue.lock_and_dequeue_or_receiver().await {
             Ok(data) => {
                 return Ok(Response::new(DequeueResponse{data: data}));
             }
             Err(rx) => rx,
         };
-        // Release the queue lock here to avoid a deadlock
-        drop(queue);
         let data = match rx.recv().await {
             Some(data) => data,
             None => {
@@ -143,7 +133,7 @@ impl LiteMq for Server {
         info!("LENGTH {}", r.queue);
         let queues = self.queues.lock().await;
         let count = match queues.get(&r.queue) {
-            Some(q) => q.lock().await.length(),
+            Some(q) => q.lock_and_length().await,
             None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))
@@ -154,7 +144,7 @@ impl LiteMq for Server {
         info!("LENGTH {}", r.queue);
         let mut queues = self.queues.lock().await;
         let count = match queues.remove(&r.queue) {
-            Some(q) => q.lock().await.length(),
+            Some(q) => q.lock_and_length().await,
             None => 0,
         };
         Ok(Response::new(QueueLength{count: count}))

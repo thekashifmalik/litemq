@@ -1,9 +1,40 @@
+
+use tokio::sync::Mutex;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::channel;
 
 use log::debug;
 
+
+
+pub struct ThreadSafeQueue{
+    pub queue: Mutex<Queue>,
+}
+
+impl ThreadSafeQueue {
+    pub fn new() -> Self {
+        ThreadSafeQueue{
+            queue: Mutex::new(Queue::new()),
+        }
+    }
+
+    pub async fn lock_and_length(&self) -> i64 {
+        let queue = self.queue.lock().await;
+        queue.messages.len() as i64
+    }
+
+    pub async fn lock_and_enqueue(&self, data: Vec<u8>) -> i64 {
+        let mut queue = self.queue.lock().await;
+        queue.enqueue(data).await
+    }
+
+    pub async fn lock_and_dequeue_or_receiver(&self, ) -> Result<Vec<u8>, Receiver<Vec<u8>>> {
+        let mut queue = self.queue.lock().await;
+        queue.dequeue_or_receiver()
+    }
+
+}
 
 pub struct Queue{
     pub messages: Vec<Vec<u8>>,
@@ -18,6 +49,7 @@ impl Queue {
         }
     }
 }
+
 impl Queue {
     pub fn length(&self) -> i64 {
         self.messages.len() as i64
