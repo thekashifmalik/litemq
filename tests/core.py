@@ -1,5 +1,7 @@
+from contextlib import contextmanager
 import time
 import subprocess
+
 import pytest
 from grpclib.client import Channel
 
@@ -12,21 +14,26 @@ TEST_ENV = {
     'PORT': str(TEST_PORT),
 }
 
-
-@pytest.fixture(params=['go', 'rust'])
-def server(request):
-    # Sleep here so the server has enough time to give up the port between tests.
-    time.sleep(0.01)
-    if request.param == 'rust':
+@contextmanager
+def running_server(param):
+    if param == 'rust':
         server = subprocess.Popen(["target/release/litemq"], env=TEST_ENV)
     else:
         server = subprocess.Popen(["build/litemq"], env=TEST_ENV)
     # Sleep here to give the server time to start before the tests run.
     time.sleep(0.02)
     try:
-        yield request.param
+        yield
     finally:
         server.kill()
+
+
+@pytest.fixture(params=['go', 'rust'])
+def server(request):
+    # Sleep here so the server has enough time to give up the port between tests.
+    time.sleep(0.01)
+    with running_server(request.param):
+        yield request.param
 
 
 def new_client(param):

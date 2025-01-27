@@ -1,7 +1,8 @@
 import asyncio
 import pytest
 
-from .core import server, new_client
+from .core import server
+from .core import new_client
 
 
 async def test_server(server):
