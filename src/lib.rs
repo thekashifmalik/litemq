@@ -1,6 +1,7 @@
 use std::env;
 use std::error::Error;
 use std::collections::HashMap;
+use tokio::fs;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 
@@ -17,6 +18,7 @@ use generated::QueueLength;
 use generated::EnqueueRequest;
 use generated::DequeueResponse;
 use queues::ThreadSafeQueue;
+use queues::InMemoryQueue;
 
 mod queues;
 
@@ -27,16 +29,30 @@ mod generated {
 
 pub struct Server{
     queues: Mutex<HashMap<String, Arc<ThreadSafeQueue>>>,
+    // data_dir: Option<String>,
 }
 
-
 impl Server {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         env_logger::Builder::from_env(env_logger::Env::default().filter_or("LOG_LEVEL", "info")).format_target(false).init();
         info!("LiteMQ");
-    	debug!("debug logging enabled");
+        debug!("debug logging enabled");
+
+        let data_dir =  match env::var("LITEMQ_DATA_DIR") {
+            Ok(d) => {
+                info!("LITEMQ_DATA_DIR: {}", d);
+                fs::create_dir_all(&d).await.unwrap();
+                Some(d)
+
+            },
+            Err(_) => {
+                warn!("LITEMQ_DATA_DIR not set, using in-memory queues");
+                None
+            }
+        };
         Server{
             queues: Mutex::new(HashMap::new()),
+            // data_dir: data_dir,
         }
     }
 
@@ -80,7 +96,7 @@ impl Server {
         match queues.get(name) {
             Some(q) => q.clone(),
             None => {
-                let q = Arc::new(ThreadSafeQueue::new());
+                let q = Arc::new(ThreadSafeQueue::new(InMemoryQueue::new()));
                 queues.insert(name.to_string(), q.clone());
                 q
             }
@@ -131,11 +147,8 @@ impl LiteMq for Server {
     async fn length(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
         info!("LENGTH {}", r.queue);
-        let queues = self.queues.lock().await;
-        let count = match queues.get(&r.queue) {
-            Some(q) => q.lock_and_length().await,
-            None => 0,
-        };
+        let queue = self.lock_and_get_or_create_queue(&r.queue).await;
+        let count = queue.lock_and_length().await;
         Ok(Response::new(QueueLength{count: count}))
     }
 
