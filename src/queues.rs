@@ -9,6 +9,13 @@ use tokio::sync::mpsc::channel;
 use log::debug;
 
 
+pub trait Queue {
+    async fn length(&self) -> i64;
+    async fn enqueue(&mut self, data: Vec<u8>) -> i64;
+    async fn dequeue_or_receiver(&mut self) -> Result<Vec<u8>, Receiver<Vec<u8>>>;
+}
+
+
 pub struct ThreadSafeQueue{
     pub queue: Mutex<InMemoryQueue>,
 }
