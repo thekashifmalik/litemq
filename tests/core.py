@@ -37,9 +37,5 @@ def server(request):
 
 
 def new_client(param):
-    if param == 'rust':
-        channel = Channel('127.0.0.1', TEST_PORT)
-    else:
-        channel = Channel('127.0.0.1', TEST_PORT)
-
+    channel = Channel('127.0.0.1', TEST_PORT)
     return LiteMQ(channel)
