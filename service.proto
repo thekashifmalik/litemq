@@ -8,6 +8,7 @@ service LiteMQ {
   rpc Purge (QueueID) returns (QueueLength) {}
   rpc Length (QueueID) returns (QueueLength) {}
   rpc Health (Nothing) returns (Nothing) {}
+  rpc Flush (Nothing) returns (Nothing) {}
 }
 
 message EnqueueRequest {

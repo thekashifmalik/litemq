@@ -24,6 +24,7 @@ const (
 	LiteMQ_Purge_FullMethodName   = "/LiteMQ/Purge"
 	LiteMQ_Length_FullMethodName  = "/LiteMQ/Length"
 	LiteMQ_Health_FullMethodName  = "/LiteMQ/Health"
+	LiteMQ_Flush_FullMethodName   = "/LiteMQ/Flush"
 )
 
 // LiteMQClient is the client API for LiteMQ service.
@@ -35,6 +36,7 @@ type LiteMQClient interface {
 	Purge(ctx context.Context, in *QueueID, opts ...grpc.CallOption) (*QueueLength, error)
 	Length(ctx context.Context, in *QueueID, opts ...grpc.CallOption) (*QueueLength, error)
 	Health(ctx context.Context, in *Nothing, opts ...grpc.CallOption) (*Nothing, error)
+	Flush(ctx context.Context, in *Nothing, opts ...grpc.CallOption) (*Nothing, error)
 }
 
 type liteMQClient struct {
@@ -95,6 +97,16 @@ func (c *liteMQClient) Health(ctx context.Context, in *Nothing, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *liteMQClient) Flush(ctx context.Context, in *Nothing, opts ...grpc.CallOption) (*Nothing, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Nothing)
+	err := c.cc.Invoke(ctx, LiteMQ_Flush_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LiteMQServer is the server API for LiteMQ service.
 // All implementations must embed UnimplementedLiteMQServer
 // for forward compatibility.
@@ -104,6 +116,7 @@ type LiteMQServer interface {
 	Purge(context.Context, *QueueID) (*QueueLength, error)
 	Length(context.Context, *QueueID) (*QueueLength, error)
 	Health(context.Context, *Nothing) (*Nothing, error)
+	Flush(context.Context, *Nothing) (*Nothing, error)
 	mustEmbedUnimplementedLiteMQServer()
 }
 
@@ -128,6 +141,9 @@ func (UnimplementedLiteMQServer) Length(context.Context, *QueueID) (*QueueLength
 }
 func (UnimplementedLiteMQServer) Health(context.Context, *Nothing) (*Nothing, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Health not implemented")
+}
+func (UnimplementedLiteMQServer) Flush(context.Context, *Nothing) (*Nothing, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Flush not implemented")
 }
 func (UnimplementedLiteMQServer) mustEmbedUnimplementedLiteMQServer() {}
 func (UnimplementedLiteMQServer) testEmbeddedByValue()                {}
@@ -240,6 +256,24 @@ func _LiteMQ_Health_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LiteMQ_Flush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Nothing)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LiteMQServer).Flush(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LiteMQ_Flush_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LiteMQServer).Flush(ctx, req.(*Nothing))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LiteMQ_ServiceDesc is the grpc.ServiceDesc for LiteMQ service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -266,6 +300,10 @@ var LiteMQ_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Health",
 			Handler:    _LiteMQ_Health_Handler,
+		},
+		{
+			MethodName: "Flush",
+			Handler:    _LiteMQ_Flush_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

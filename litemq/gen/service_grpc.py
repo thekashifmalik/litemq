@@ -28,8 +28,12 @@ class LiteMQBase(abc.ABC):
     async def Health(self, stream: 'grpclib.server.Stream[service_pb2.Nothing, service_pb2.Nothing]') -> None:
         pass
 
+    @abc.abstractmethod
+    async def Flush(self, stream: 'grpclib.server.Stream[service_pb2.Nothing, service_pb2.Nothing]') -> None:
+        pass
+
     def __mapping__(self) -> typing.Dict[str, grpclib.const.Handler]:
-        return {'/LiteMQ/Enqueue': grpclib.const.Handler(self.Enqueue, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.EnqueueRequest, service_pb2.QueueLength), '/LiteMQ/Dequeue': grpclib.const.Handler(self.Dequeue, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.QueueID, service_pb2.DequeueResponse), '/LiteMQ/Purge': grpclib.const.Handler(self.Purge, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.QueueID, service_pb2.QueueLength), '/LiteMQ/Length': grpclib.const.Handler(self.Length, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.QueueID, service_pb2.QueueLength), '/LiteMQ/Health': grpclib.const.Handler(self.Health, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.Nothing, service_pb2.Nothing)}
+        return {'/LiteMQ/Enqueue': grpclib.const.Handler(self.Enqueue, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.EnqueueRequest, service_pb2.QueueLength), '/LiteMQ/Dequeue': grpclib.const.Handler(self.Dequeue, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.QueueID, service_pb2.DequeueResponse), '/LiteMQ/Purge': grpclib.const.Handler(self.Purge, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.QueueID, service_pb2.QueueLength), '/LiteMQ/Length': grpclib.const.Handler(self.Length, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.QueueID, service_pb2.QueueLength), '/LiteMQ/Health': grpclib.const.Handler(self.Health, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.Nothing, service_pb2.Nothing), '/LiteMQ/Flush': grpclib.const.Handler(self.Flush, grpclib.const.Cardinality.UNARY_UNARY, service_pb2.Nothing, service_pb2.Nothing)}
 
 class LiteMQStub:
 
@@ -39,3 +43,4 @@ class LiteMQStub:
         self.Purge = grpclib.client.UnaryUnaryMethod(channel, '/LiteMQ/Purge', service_pb2.QueueID, service_pb2.QueueLength)
         self.Length = grpclib.client.UnaryUnaryMethod(channel, '/LiteMQ/Length', service_pb2.QueueID, service_pb2.QueueLength)
         self.Health = grpclib.client.UnaryUnaryMethod(channel, '/LiteMQ/Health', service_pb2.Nothing, service_pb2.Nothing)
+        self.Flush = grpclib.client.UnaryUnaryMethod(channel, '/LiteMQ/Flush', service_pb2.Nothing, service_pb2.Nothing)

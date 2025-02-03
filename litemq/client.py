@@ -18,6 +18,7 @@ class LiteMQ:
     """
 
     def __init__(self, channel: Channel):
+        self.channel = channel
         self.stub = LiteMQStub(channel)
 
     async def enqueue(self, queue: str, data: bytes):
@@ -42,3 +43,6 @@ class LiteMQ:
 
     async def health(self):
         return await self.stub.Health(Nothing())
+
+    async def flush(self):
+        return await self.stub.Flush(Nothing())

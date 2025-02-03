@@ -3,6 +3,7 @@ use std::error::Error;
 use std::collections::HashMap;
 use tokio::fs;
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::Receiver;
 use std::sync::Arc;
 
 
@@ -17,7 +18,7 @@ use generated::QueueId;
 use generated::QueueLength;
 use generated::EnqueueRequest;
 use generated::DequeueResponse;
-use queues::ThreadSafeQueue;
+use queues::Queue;
 use queues::InMemoryQueue;
 
 mod queues;
@@ -28,8 +29,7 @@ mod generated {
 }
 
 pub struct Server{
-    queues: Mutex<HashMap<String, Arc<ThreadSafeQueue>>>,
-    // data_dir: Option<String>,
+    queues: Mutex<HashMap<String, Arc<Mutex<InMemoryQueue>>>>,
 }
 
 impl Server {
@@ -50,9 +50,8 @@ impl Server {
                 None
             }
         };
-        Server{
+        Self{
             queues: Mutex::new(HashMap::new()),
-            // data_dir: data_dir,
         }
     }
 
@@ -91,18 +90,55 @@ impl Server {
         };
     }
 
-    async fn lock_and_get_or_create_queue(&self, name: &str) -> Arc<ThreadSafeQueue> {
-        let mut queues = self.queues.lock().await;
-        match queues.get(name) {
-            Some(q) => q.clone(),
-            None => {
-                let q = Arc::new(ThreadSafeQueue::new(InMemoryQueue::new()));
-                queues.insert(name.to_string(), q.clone());
-                q
-            }
+    async fn lock_and_get_or_create_queue(&self, name: &str) -> Arc<Mutex<InMemoryQueue>> {
+        let mut locked = self.queues.lock().await;
+        if let Some(q) = locked.get(name) {
+            return q.clone();
+        }
+        // We have to create a new queue.
+        let queue = Arc::new(Mutex::new(InMemoryQueue::new()));
+        locked.insert(name.to_string(), queue.clone());
+        queue
+    }
+
+    async fn lock_and_enqueue(&self, name: &str, data: Vec<u8>) -> i64 {
+        let queue = self.lock_and_get_or_create_queue(name).await;
+        let mut locked = queue.lock().await;
+        locked.enqueue(data).await
+    }
+
+    async fn lock_and_dequeue_or_receiver(&self, name: &str) -> Result<Vec<u8>, Receiver<Vec<u8>>> {
+        let queue = self.lock_and_get_or_create_queue(name).await;
+        let mut locked = queue.lock().await;
+        locked.dequeue_or_receiver().await
+    }
+
+    async fn lock_and_get_queue_length(&self, name: &str) -> i64 {
+        let locked_1 = self.queues.lock().await;
+        match locked_1.get(name) {
+            None => 0,
+            Some(queue) => {
+                let locked_2 = queue.lock().await;
+                locked_2.length().await
+            },
         }
     }
 
+    async fn lock_and_purge_queue(&self, name: &str) -> i64 {
+        let locked_1 = self.queues.lock().await;
+        match locked_1.get(name) {
+            None => 0,
+            Some(queue) => {
+                let mut locked_2 = queue.lock().await;
+                locked_2.purge().await
+            },
+        }
+    }
+
+    async fn lock_and_flush(&self) {
+        let mut locked = self.queues.lock().await;
+        locked.clear();
+    }
 }
 
 #[tonic::async_trait]
@@ -115,11 +151,10 @@ impl LiteMq for Server {
 
     async fn enqueue(&self, request: Request<EnqueueRequest>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
-        let decoded = String::from_utf8(r.data.clone()).unwrap();
+        let decoded: String = String::from_utf8(r.data.clone()).unwrap();
         log::info!("ENQUEUE {} \"{}\"", r.queue, decoded);
 
-        let queue = self.lock_and_get_or_create_queue(&r.queue).await;
-        let length = queue.lock_and_enqueue(r.data).await;
+        let length = self.lock_and_enqueue(&r.queue, r.data).await;
         Ok(Response::new(QueueLength{count: length}))
     }
 
@@ -127,12 +162,13 @@ impl LiteMq for Server {
         let r = request.into_inner();
         info!("DEQUEUE {}", r.queue);
 
-        let queue = self.lock_and_get_or_create_queue(&r.queue).await;
-        let mut rx = match queue.lock_and_dequeue_or_receiver().await {
+        let mut rx = match self.lock_and_dequeue_or_receiver(&r.queue).await {
             Ok(data) => {
                 return Ok(Response::new(DequeueResponse{data: data}));
             }
-            Err(rx) => rx,
+            Err(rx) => {
+                rx
+            },
         };
         let data = match rx.recv().await {
             Some(data) => data,
@@ -147,19 +183,20 @@ impl LiteMq for Server {
     async fn length(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
         info!("LENGTH {}", r.queue);
-        let queue = self.lock_and_get_or_create_queue(&r.queue).await;
-        let count = queue.lock_and_length().await;
+        let count = self.lock_and_get_queue_length(&r.queue).await;
         Ok(Response::new(QueueLength{count: count}))
     }
 
     async fn purge(&self, request: Request<QueueId>) -> Result<Response<QueueLength>, Status> {
         let r = request.into_inner();
-        info!("LENGTH {}", r.queue);
-        let mut queues = self.queues.lock().await;
-        let count = match queues.remove(&r.queue) {
-            Some(q) => q.lock_and_length().await,
-            None => 0,
-        };
+        info!("PURGE {}", r.queue);
+        let count = self.lock_and_purge_queue(&r.queue).await;
         Ok(Response::new(QueueLength{count: count}))
+    }
+
+    async fn flush(&self, _: Request<Nothing>) -> Result<Response<Nothing>, Status> {
+        info!("FLUSH");
+        self.lock_and_flush().await;
+        Ok(Response::new(Nothing::default()))
     }
 }

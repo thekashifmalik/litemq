@@ -13,35 +13,7 @@ pub trait Queue {
     async fn length(&self) -> i64;
     async fn enqueue(&mut self, data: Vec<u8>) -> i64;
     async fn dequeue_or_receiver(&mut self) -> Result<Vec<u8>, Receiver<Vec<u8>>>;
-}
-
-
-pub struct ThreadSafeQueue{
-    pub queue: Mutex<InMemoryQueue>,
-}
-
-impl ThreadSafeQueue {
-    pub fn new(queue: InMemoryQueue) -> Self {
-        ThreadSafeQueue{
-            queue: Mutex::new(queue),
-        }
-    }
-
-    pub async fn lock_and_length(&self) -> i64 {
-        let queue = self.queue.lock().await;
-        queue.length().await as i64
-    }
-
-    pub async fn lock_and_enqueue(&self, data: Vec<u8>) -> i64 {
-        let mut queue = self.queue.lock().await;
-        queue.enqueue(data).await
-    }
-
-    pub async fn lock_and_dequeue_or_receiver(&self, ) -> Result<Vec<u8>, Receiver<Vec<u8>>> {
-        let mut queue = self.queue.lock().await;
-        queue.dequeue_or_receiver().await
-    }
-
+    async fn purge(&mut self) -> i64;
 }
 
 pub struct InMemoryQueue{
@@ -93,5 +65,11 @@ impl Queue for InMemoryQueue {
         self.channels.push(tx);
         debug!("* waiting");
         Err(rx)
+    }
+
+    async fn purge(&mut self) -> i64 {
+        let length: i64 = self.length().await;
+        self.messages.clear();
+        return length;
     }
 }
