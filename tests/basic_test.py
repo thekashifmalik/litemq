@@ -97,3 +97,14 @@ async def test_purge(server):
     assert await client.length('test') == 1
     assert await client.purge('test') == 1
     assert await client.length('test') == 0
+
+
+async def test_flush(server):
+    client = new_client(server)
+    await client.enqueue('test-1', b'message')
+    await client.enqueue('test-2', b'message')
+    assert await client.length('test-1') == 1
+    assert await client.length('test-2') == 1
+    assert await client.flush()
+    assert await client.length('test-1') == 0
+    assert await client.length('test-2') == 0
