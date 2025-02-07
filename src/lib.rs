@@ -1,9 +1,11 @@
+use core::fmt;
 use std::env;
 use std::error::Error;
 use std::collections::HashMap;
 use tokio::fs;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::channel;
 use std::sync::Arc;
 
 
@@ -20,6 +22,7 @@ use generated::EnqueueRequest;
 use generated::DequeueResponse;
 use queues::Queue;
 use queues::InMemoryQueue;
+use queues::PersistentQueue;
 
 mod queues;
 
@@ -29,8 +32,11 @@ mod generated {
 }
 
 pub struct Server{
-    queues: Mutex<HashMap<String, Arc<Mutex<InMemoryQueue>>>>,
+    queues: Mutex<HashMap<String, Arc<Mutex<PersistentQueue>>>>,
+    data_dir: String,
 }
+
+const DEFAULT_DATA_DIR: &str = ".litemq";
 
 impl Server {
     pub async fn new() -> Self {
@@ -38,20 +44,31 @@ impl Server {
         info!("LiteMQ");
         debug!("debug logging enabled");
 
-        let data_dir =  match env::var("LITEMQ_DATA_DIR") {
-            Ok(d) => {
-                info!("LITEMQ_DATA_DIR: {}", d);
-                fs::create_dir_all(&d).await.unwrap();
-                Some(d)
+        let args = env::args().collect::<Vec<String>>();
 
-            },
-            Err(_) => {
-                warn!("LITEMQ_DATA_DIR not set, using in-memory queues");
-                None
-            }
+        let data_dir = if args.len() == 1 {
+            warn!("no data directory given, using default: {}", DEFAULT_DATA_DIR);
+            DEFAULT_DATA_DIR
+        } else {
+            let d = &args[1];
+            info!("using data directory: {}", d);
+            d
         };
+        fs::create_dir_all(data_dir).await.unwrap();
+
+        let mut queues = HashMap::new();
+        let mut results = fs::read_dir(data_dir).await.unwrap();
+        while let Ok(Some(entry)) = results.next_entry().await {
+            let name = entry.file_name().into_string().unwrap();
+            let path = format!("{}/{}", data_dir, name);
+            let queue = Arc::new(Mutex::new(PersistentQueue::new(&path)));
+            queues.insert(name, queue);
+        }
+        debug!("loaded {} queues from disk", queues.len());
+
         Self{
-            queues: Mutex::new(HashMap::new()),
+            queues: Mutex::new(queues),
+            data_dir: data_dir.to_string(),
         }
     }
 
@@ -90,13 +107,16 @@ impl Server {
         };
     }
 
-    async fn lock_and_get_or_create_queue(&self, name: &str) -> Arc<Mutex<InMemoryQueue>> {
+    async fn lock_and_get_or_create_queue(&self, name: &str) -> Arc<Mutex<PersistentQueue>> {
         let mut locked = self.queues.lock().await;
         if let Some(q) = locked.get(name) {
             return q.clone();
         }
         // We have to create a new queue.
-        let queue = Arc::new(Mutex::new(InMemoryQueue::new()));
+        let path = format!("{}/{}", self.data_dir, name);
+        debug!("creating queue: {}", path);
+        fs::write(&path, "").await.unwrap();
+        let queue = Arc::new(Mutex::new(PersistentQueue::new(&path)));
         locked.insert(name.to_string(), queue.clone());
         queue
     }
@@ -104,13 +124,40 @@ impl Server {
     async fn lock_and_enqueue(&self, name: &str, data: Vec<u8>) -> i64 {
         let queue = self.lock_and_get_or_create_queue(name).await;
         let mut locked = queue.lock().await;
+        // If there are channels waiting for data, we can send the data to the first one.
+        if locked.channels.len() > 0 {
+            let mut tx = locked.channels.remove(0);
+            // Currently dequeue is not cleaning up senders that are closed so we need to do it here.
+            while tx.is_closed() && locked.channels.len() > 0 {
+                tx = locked.channels.remove(0);
+            }
+            // If we found a valid channel, we can send the data and return the queue length.
+            if !tx.is_closed() {
+                debug!("* {} bytes", data.len());
+                tx.send(data).await.unwrap();
+                return locked.length().await;
+            }
+        }
+        // If we did not find a valid channel, we need to put the data into the queue.
+        debug!("> {} bytes", data.len());
         locked.enqueue(data).await
     }
 
-    async fn lock_and_dequeue_or_receiver(&self, name: &str) -> Result<Vec<u8>, Receiver<Vec<u8>>> {
+    async fn lock_and_dequeue_or_receiver(&self, name: &str) -> DequeueOrReceiver {
         let queue = self.lock_and_get_or_create_queue(name).await;
         let mut locked = queue.lock().await;
-        locked.dequeue_or_receiver().await
+        match locked.dequeue().await {
+            Some(data) => {
+                debug!("< {} bytes", data.len());
+                DequeueOrReceiver::Dequeue(data)
+            },
+            None => {
+                let (tx, rx) = channel(1);
+                locked.channels.push(tx);
+                debug!("* waiting");
+                DequeueOrReceiver::Receiver(rx)
+            },
+        }
     }
 
     async fn lock_and_get_queue_length(&self, name: &str) -> i64 {
@@ -137,9 +184,23 @@ impl Server {
 
     async fn lock_and_flush(&self) {
         let mut locked = self.queues.lock().await;
+        let mut count = 0;
+        for (_, queue) in locked.iter_mut() {
+            let mut locked = queue.lock().await;
+            locked.purge().await;
+            count += 1;
+        }
         locked.clear();
+        debug!("{} removed", count);
     }
 }
+
+
+enum DequeueOrReceiver {
+    Dequeue(Vec<u8>),
+    Receiver(Receiver<Vec<u8>>),
+}
+
 
 #[tonic::async_trait]
 impl LiteMq for Server {
@@ -163,18 +224,18 @@ impl LiteMq for Server {
         info!("DEQUEUE {}", r.queue);
 
         let mut rx = match self.lock_and_dequeue_or_receiver(&r.queue).await {
-            Ok(data) => {
+            DequeueOrReceiver::Dequeue(data) => {
                 return Ok(Response::new(DequeueResponse{data: data}));
             }
-            Err(rx) => {
+            DequeueOrReceiver::Receiver(rx) => {
                 rx
             },
         };
         let data = match rx.recv().await {
             Some(data) => data,
             None => {
-                error!("no data received");
-                return Err(Status::internal("no data received"));
+                warn!("no data received");
+                return Err(Status::aborted("no data received"));
             }
         };
         Ok(Response::new(DequeueResponse{data: data}))

@@ -1,29 +1,29 @@
 import asyncio
 import pytest_asyncio
 import nest_asyncio
-from .core import server, new_client
+from .core import server, flushed_client
 
 
 async def test_length(server, aio_benchmark):
-    client = new_client(server)
-    aio_benchmark(client.length, 'test-benchmark')
+    client = await flushed_client(server)
+    aio_benchmark(client.length, 'test-benchmark-length')
 
 
 async def test_enqueue(server, aio_benchmark):
-    client = new_client(server)
-    aio_benchmark(client.enqueue, 'test-benchmark', b'message')
+    client = await flushed_client(server)
+    aio_benchmark(client.enqueue, 'test-benchmark-enqueue', b'message')
 
 
 async def test_enqueue_large(server, aio_benchmark):
-    client = new_client(server)
-    aio_benchmark(client.enqueue, 'test-benchmark', b'message' * 1000)
+    client = await flushed_client(server)
+    aio_benchmark(client.enqueue, 'test-benchmark-enqueue-large', b'message' * 1000)
 
 
 async def test_enqueue_and_dequeue(server, aio_benchmark):
-    client = new_client(server)
+    client = await flushed_client(server)
     async def task():
-        await client.enqueue('test-benchmark', b'message')
-        await client.dequeue('test-benchmark')
+        await client.enqueue('test-benchmark-enqueue-and-dequeue', b'message')
+        await client.dequeue('test-benchmark-enqueue-and-dequeue')
     aio_benchmark(task)
 
 

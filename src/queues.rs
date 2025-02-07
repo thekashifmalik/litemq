@@ -7,12 +7,13 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::channel;
 
 use log::debug;
+use log::error;
 
 
 pub trait Queue {
     async fn length(&self) -> i64;
     async fn enqueue(&mut self, data: Vec<u8>) -> i64;
-    async fn dequeue_or_receiver(&mut self) -> Result<Vec<u8>, Receiver<Vec<u8>>>;
+    async fn dequeue(&mut self) -> Option<Vec<u8>>;
     async fn purge(&mut self) -> i64;
 }
 
@@ -36,40 +37,98 @@ impl Queue for InMemoryQueue {
     }
 
     async fn enqueue(&mut self, data: Vec<u8>) -> i64 {
-        if self.channels.len() > 0 {
-            let mut tx = self.channels.remove(0);
-            // Currently dequeue is not cleaning up senders that are closed so we need to do it here.
-            while tx.is_closed() && self.channels.len() > 0 {
-                tx = self.channels.remove(0);
-            }
-            // If we found a valid channel, we can send the data and return the queue length.
-            if !tx.is_closed() {
-                debug!("* {} bytes", data.len());
-                tx.send(data).await.unwrap();
-                return self.length().await;
-            }
-        }
-        // If we did not find a valid channel, we need to put the data into the queue.
-        debug!("> {} bytes", data.len());
         self.messages.push(data);
         self.length().await
     }
 
-    async fn dequeue_or_receiver(&mut self) -> Result<Vec<u8>, Receiver<Vec<u8>>> {
+    async fn dequeue(&mut self) -> Option<Vec<u8>> {
         if self.length().await > 0 {
-            let data = self.messages.remove(0);
-            debug!("< {} bytes", data.len());
-            return Ok(data);
+            Some(self.messages.remove(0))
+        } else {
+            None
         }
-        let (tx, rx) = channel(1);
-        self.channels.push(tx);
-        debug!("* waiting");
-        Err(rx)
     }
 
     async fn purge(&mut self) -> i64 {
         let length: i64 = self.length().await;
         self.messages.clear();
+        return length;
+    }
+}
+
+
+use tokio::fs::File;
+use tokio::fs;
+
+
+pub struct PersistentQueue{
+    pub path: String,
+    pub channels: Vec<Sender<Vec<u8>>>,
+}
+
+impl PersistentQueue {
+    pub fn new(path: &str) -> Self {
+        PersistentQueue{
+            path: path.to_string(),
+            channels: Vec::new(),
+        }
+    }
+}
+
+impl Queue for PersistentQueue {
+    async fn length(&self) -> i64 {
+        match fs::read_to_string(&self.path).await {
+            Ok(f) => f.lines().count() as i64,
+            Err(_) => 0,
+        }
+    }
+
+    async fn enqueue(&mut self, data: Vec<u8>) -> i64 {
+        let f = match fs::read_to_string(&self.path).await {
+            Ok(f) => f,
+            Err(_) => "".to_string(),
+        };
+        let mut lines = f.lines().collect::<Vec<&str>>();
+        let new = String::from_utf8(data).unwrap();
+        lines.push(&new);
+        let out = lines.iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        match fs::write(&self.path, out.clone()).await {
+            Ok(_) => {},
+            Err(_) => {
+                let mut file = File::create(&self.path).await.unwrap();
+                file.write_all(out.as_bytes()).await.unwrap();
+            }
+        };
+        self.length().await
+    }
+
+    async fn dequeue(&mut self) -> Option<Vec<u8>> {
+        if self.length().await > 0 {
+            let f: String = fs::read_to_string(&self.path).await.unwrap();
+            let mut lines = f.lines().collect::<Vec<&str>>();
+            let data = lines.remove(0).as_bytes().to_vec();
+            let out = lines.iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs::write(&self.path, out).await.unwrap();
+            return Some(data);
+        } else {
+            None
+        }
+    }
+
+    async fn purge(&mut self) -> i64 {
+        let length: i64 = self.length().await;
+        match fs::remove_file(&self.path).await {
+            Ok(_) => {},
+            Err(e) => {
+                error!("could not remove file {}: {}", self.path, e);
+            }
+        };
         return length;
     }
 }

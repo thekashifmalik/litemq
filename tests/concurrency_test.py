@@ -1,11 +1,11 @@
 import asyncio
 
-from .core import server, new_client
+from .core import server, flushed_client
 
 
 
 async def test_enqueue_while_blocking_dequeue(server):
-    client = new_client(server)
+    client = await flushed_client(server)
 
     async def task():
         assert await client.enqueue('test-blocking', b'message') == 0

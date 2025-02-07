@@ -39,3 +39,10 @@ def server(request):
 def new_client(param):
     channel = Channel('127.0.0.1', TEST_PORT)
     return LiteMQ(channel)
+
+
+async def flushed_client(server):
+    client = new_client(server)
+    if server == 'rust':
+        await client.flush()
+    return client
