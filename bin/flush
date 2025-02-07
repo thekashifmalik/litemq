@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+grpcurl -plaintext -proto=service.proto localhost:42090 LiteMQ.Flush
