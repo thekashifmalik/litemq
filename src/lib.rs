@@ -190,6 +190,8 @@ impl Server {
             locked.purge().await;
             count += 1;
         }
+        // TODO: Make it so we don't have to clear this map, so that we can keep the queue channels alive. This will let
+        // us keep dequeue clients connected across flush calls.
         locked.clear();
         debug!("{} removed", count);
     }
