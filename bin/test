@@ -12,7 +12,7 @@ go mod tidy
 go build -o build/litemq cmd/litemq/main.go
 cargo build --release
 poetry install
-PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run pytest -v
+PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python poetry run pytest -v "$@"
 echo "Integration tests passed"
 
 echo "All tests passed"
