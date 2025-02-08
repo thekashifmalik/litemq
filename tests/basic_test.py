@@ -101,6 +101,9 @@ async def test_purge(server):
 
 
 async def test_flush(server):
+    # The Go server does not support the flush command.
+    if server == 'go':
+        return
     client = await flushed_client(server)
     await client.enqueue('test-1', b'message')
     await client.enqueue('test-2', b'message')
