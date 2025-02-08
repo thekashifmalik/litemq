@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+QUEUE="$1"
+DATA=$(echo -n "$2" | base64)
+grpcurl -plaintext -emit-defaults -proto=service.proto -d '{"queue": "'$QUEUE'"}' localhost:42090 LiteMQ.Length | jq -r '.count'
