@@ -122,8 +122,10 @@ impl Queue for PersistentQueue {
                 .map(|n| n.to_string())
                 .collect::<Vec<_>>()
                 .join("\n");
-            // Append newline before write.
-            out.push('\n');
+            // Append newline before write if needed.
+            if out.len() > 0 && out.chars().last().unwrap() != '\n' {
+                out.push('\n');
+            }
             fs::write(&self.path, out).await.unwrap();
             return Some(data);
         } else {
