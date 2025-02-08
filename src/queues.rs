@@ -84,25 +84,33 @@ impl Queue for PersistentQueue {
     }
 
     async fn enqueue(&mut self, data: Vec<u8>) -> i64 {
-        let f = match fs::read_to_string(&self.path).await {
+        // Get the current length of the queue so we can calculate the final length at the end of this function. We do
+        // this because there is a race-condition between the file append/write and the length read.
+        let length = self.length().await;
+        // Open the file for appending
+        let mut f = match fs::OpenOptions::new()
+            .append(true)
+            .open(&self.path)
+            .await {
             Ok(f) => f,
-            Err(_) => "".to_string(),
-        };
-        let mut lines = f.lines().collect::<Vec<&str>>();
-        let new = String::from_utf8(data).unwrap();
-        lines.push(&new);
-        let out = lines.iter()
-            .map(|n| n.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        match fs::write(&self.path, out.clone()).await {
-            Ok(_) => {},
-            Err(_) => {
-                let mut file = File::create(&self.path).await.unwrap();
-                file.write_all(out.as_bytes()).await.unwrap();
+            Err(e) => {
+                error!("could not open file {}: {}", self.path, e);
+                return 0;
             }
         };
-        self.length().await
+        // Add a newline to the data.
+        let mut payload = data;
+        payload.push(b'\n');
+        // Write the data to the file
+        match f.write_all(&payload).await {
+            Ok(_) => {},
+            Err(e) => {
+                error!("could not write to file {}: {}", self.path, e);
+                return 0;
+            }
+        };
+        // Return the new length of the queue. See start of method to see understand why we do this.
+        length + 1
     }
 
     async fn dequeue(&mut self) -> Option<Vec<u8>> {
@@ -110,10 +118,12 @@ impl Queue for PersistentQueue {
             let f: String = fs::read_to_string(&self.path).await.unwrap();
             let mut lines = f.lines().collect::<Vec<&str>>();
             let data = lines.remove(0).as_bytes().to_vec();
-            let out = lines.iter()
+            let mut out = lines.iter()
                 .map(|n| n.to_string())
                 .collect::<Vec<_>>()
                 .join("\n");
+            // Append newline before write.
+            out.push('\n');
             fs::write(&self.path, out).await.unwrap();
             return Some(data);
         } else {
