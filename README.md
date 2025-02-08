@@ -1,5 +1,5 @@
 # litemq
-Free & open source in-memory message queue, generic in nature, but intended for use in background task processing for
+Free & open source persistent message queue, generic in nature, but intended for use in background task processing for
 web applications.
 
 ![Screenshot](./screenshot.png)
@@ -14,17 +14,27 @@ services:
     image: thekashifmalik/litemq:latest
     ports:
       - 42090:42090
+    volumes:
+      - ./.litemq:/app/.litemq
 
 ```
 
 You can also use the docker image directly:
 
 ```bash
-docker run --rm -it -p 42090:42090 thekashifmalik/litemq:latest
+docker run --rm -it -p 42090:42090 -v ./.litemq:/app/.litemq thekashifmalik/litemq:latest
 ```
 
 ## Config
-You can set the following environment variables:
+You can pass a custom data directory as the first argument of the `litemq` command:
+
+```bash
+litemq var/litemq
+```
+
+This defaults to `.litemq` in the current directory.
+
+You can also set the following environment variables:
 
 - `PORT`: Change the port the server uses.
 - `LOG_LEVEL`: Set to `debug` to enable debug logging.
