@@ -56,15 +56,17 @@ impl Server {
         };
         fs::create_dir_all(data_dir).await.unwrap();
 
+        // Read any existing queues from disk.
         let mut queues = HashMap::new();
         let mut results = fs::read_dir(data_dir).await.unwrap();
         while let Ok(Some(entry)) = results.next_entry().await {
             let name = entry.file_name().into_string().unwrap();
             let path = format!("{}/{}", data_dir, name);
-            let queue = Arc::new(Mutex::new(PersistentQueue::new(&path)));
+            let queue = Arc::new(Mutex::new(PersistentQueue::existing(&path)));
             queues.insert(name, queue);
         }
-        debug!("loaded {} queues from disk", queues.len());
+        let length = queues.len();
+        debug!("loaded {} queue{} from disk", length, if length == 1 {""} else {"s"});
 
         Self{
             queues: Mutex::new(queues),
@@ -115,8 +117,7 @@ impl Server {
         // We have to create a new queue.
         let path = format!("{}/{}", self.data_dir, name);
         debug!("creating queue: {}", path);
-        fs::write(&path, "").await.unwrap();
-        let queue = Arc::new(Mutex::new(PersistentQueue::new(&path)));
+        let queue = Arc::new(Mutex::new(PersistentQueue::new(&path).await));
         locked.insert(name.to_string(), queue.clone());
         queue
     }

@@ -67,7 +67,14 @@ pub struct PersistentQueue{
 }
 
 impl PersistentQueue {
-    pub fn new(path: &str) -> Self {
+    pub async fn new(path: &str) -> Self {
+        fs::write(path, "").await.unwrap();
+        PersistentQueue{
+            path: path.to_string(),
+            channels: Vec::new(),
+        }
+    }
+    pub fn existing(path: &str) -> Self {
         PersistentQueue{
             path: path.to_string(),
             channels: Vec::new(),
