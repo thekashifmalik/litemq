@@ -6,7 +6,7 @@ from .core import server, flushed_client
 
 
 async def test_enqueue_while_blocking_dequeue(server):
-    client = await flushed_client(server)
+    client = await flushed_client()
 
     async def task():
         time.sleep(0.01)

@@ -5,22 +5,22 @@ from .core import server, flushed_client
 
 
 async def test_length(server, aio_benchmark):
-    client = await flushed_client(server)
+    client = await flushed_client()
     aio_benchmark(client.length, 'test-benchmark-length')
 
 
 async def test_enqueue(server, aio_benchmark):
-    client = await flushed_client(server)
+    client = await flushed_client()
     aio_benchmark(client.enqueue, 'test-benchmark-enqueue', b'message')
 
 
 async def test_enqueue_large(server, aio_benchmark):
-    client = await flushed_client(server)
+    client = await flushed_client()
     aio_benchmark(client.enqueue, 'test-benchmark-enqueue-large', b'message' * 1000)
 
 
 async def test_enqueue_and_dequeue(server, aio_benchmark):
-    client = await flushed_client(server)
+    client = await flushed_client()
     async def task():
         await client.enqueue('test-benchmark-enqueue-and-dequeue', b'message')
         await client.dequeue('test-benchmark-enqueue-and-dequeue')

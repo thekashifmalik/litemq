@@ -15,11 +15,8 @@ TEST_ENV = {
 }
 
 @contextmanager
-def running_server(param):
-    if param == 'rust':
-        server = subprocess.Popen(["target/release/litemq"], env=TEST_ENV)
-    else:
-        server = subprocess.Popen(["build/litemq"], env=TEST_ENV)
+def running_server():
+    server = subprocess.Popen(["target/release/litemq"], env=TEST_ENV)
     # Sleep here to give the server time to start before the tests run.
     time.sleep(0.02)
     try:
@@ -28,21 +25,20 @@ def running_server(param):
         server.kill()
 
 
-@pytest.fixture(params=['go', 'rust'])
+@pytest.fixture
 def server(request):
     # Sleep here so the server has enough time to give up the port between tests.
     time.sleep(0.01)
-    with running_server(request.param):
-        yield request.param
+    with running_server():
+        yield
 
 
-def new_client(param):
+def new_client():
     channel = Channel('127.0.0.1', TEST_PORT)
     return LiteMQ(channel)
 
 
-async def flushed_client(server):
-    client = new_client(server)
-    if server == 'rust':
-        await client.flush()
+async def flushed_client():
+    client = new_client()
+    await client.flush()
     return client
