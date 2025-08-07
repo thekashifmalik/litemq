@@ -1,4 +1,6 @@
 
+use std::os::unix::fs::MetadataExt;
+
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
@@ -8,6 +10,7 @@ use tokio::sync::mpsc::channel;
 
 use log::debug;
 use log::error;
+use base64::{Engine as _, engine::general_purpose};
 
 
 pub trait Queue {
@@ -80,14 +83,34 @@ impl PersistentQueue {
             channels: Vec::new(),
         }
     }
+
+    // Helper method to get the number of dequeued messages
+    async fn get_num_dequeued(&self) -> u64 {
+        let dequeue_path = self.get_dequeue_path();
+        match fs::metadata(&dequeue_path).await {
+            Ok(f) => f.size(),
+            Err(_) => 0,
+        }
+    }
+
+    // Helper method to get the dequeue tracking file path
+    fn get_dequeue_path(&self) -> String {
+        format!("{}.dequeued", self.path)
+    }
 }
 
 impl Queue for PersistentQueue {
     async fn length(&self) -> i64 {
-        match fs::read_to_string(&self.path).await {
+        let total_length = match fs::read_to_string(&self.path).await {
             Ok(f) => f.lines().count() as i64,
             Err(_) => 0,
-        }
+        };
+
+        // Check how many messages have already been dequeued
+        let num_dequeued = self.get_num_dequeued().await as i64;
+
+        // Return available messages (total - dequeued)
+        total_length - num_dequeued
     }
 
     async fn enqueue(&mut self, data: Vec<u8>) -> i64 {
@@ -105,8 +128,10 @@ impl Queue for PersistentQueue {
                 return 0;
             }
         };
-        // Add a newline to the data.
-        let mut payload = data;
+        // Encode the data in base64 to avoid newline issues
+        let encoded_data = general_purpose::STANDARD.encode(&data);
+        // Add a newline to separate messages (safe since base64 never contains newlines)
+        let mut payload = encoded_data.into_bytes();
         payload.push(b'\n');
         // Write the data to the file
         match f.write_all(&payload).await {
@@ -121,33 +146,84 @@ impl Queue for PersistentQueue {
     }
 
     async fn dequeue(&mut self) -> Option<Vec<u8>> {
-        if self.length().await > 0 {
-            let f: String = fs::read_to_string(&self.path).await.unwrap();
-            let mut lines = f.lines().collect::<Vec<&str>>();
-            let data = lines.remove(0).as_bytes().to_vec();
-            let mut out = lines.iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join("\n");
-            // Append newline before write if needed.
-            if out.len() > 0 && out.chars().last().unwrap() != '\n' {
-                out.push('\n');
+        // Get num_dequeued first
+        let num_dequeued = self.get_num_dequeued().await;
+
+        // Read the file once and compute both total length and get the line we need
+        let f = match fs::read_to_string(&self.path).await {
+            Ok(content) => content,
+            Err(e) => {
+                error!("could not read file {}: {}", self.path, e);
+                return None;
             }
-            fs::write(&self.path, out).await.unwrap();
-            return Some(data);
+        };
+
+        let lines: Vec<&str> = f.lines().collect();
+        let total_length = lines.len() as i64;
+        let available_length = total_length - num_dequeued as i64;
+
+        if available_length > 0 {
+            // Get the line at the current offset (num_dequeued position)
+            if let Some(line) = lines.get(num_dequeued as usize) {
+                // Decode the base64 encoded data back to original bytes
+                let data = match general_purpose::STANDARD.decode(line) {
+                    Ok(decoded) => decoded,
+                    Err(e) => {
+                        error!("could not decode base64 data from line {}: {}", num_dequeued, e);
+                        return None;
+                    }
+                };
+
+                // Update the dequeue counter by appending 'x'
+                let dequeue_path = self.get_dequeue_path();
+                match fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&dequeue_path)
+                    .await {
+                    Ok(mut f) => {
+                        if let Err(e) = f.write_all(b"x").await {
+                            error!("could not write to dequeue file {}: {}", dequeue_path, e);
+                            return None;
+                        }
+                    },
+                    Err(e) => {
+                        error!("could not open dequeue file {}: {}", dequeue_path, e);
+                        return None;
+                    }
+                };
+
+                return Some(data);
+            } else {
+                error!("line at offset {} not found in file {}", num_dequeued, self.path);
+                return None;
+            }
         } else {
+            // TODO: Does it make sense to do compaction here when the total_length > 0?
             None
         }
     }
 
     async fn purge(&mut self) -> i64 {
         let length: i64 = self.length().await;
+
+        // Remove the main queue file
         match fs::remove_file(&self.path).await {
             Ok(_) => {},
             Err(e) => {
                 error!("could not remove file {}: {}", self.path, e);
             }
         };
+
+        // Also remove the dequeue tracking file
+        let dequeue_path = self.get_dequeue_path();
+        match fs::remove_file(&dequeue_path).await {
+            Ok(_) => {},
+            Err(_) => {
+                // It's okay if the dequeue file doesn't exist
+            }
+        };
+
         return length;
     }
 }

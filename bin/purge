@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+QUEUE="$1"
+grpcurl -plaintext -proto=service.proto -d '{"queue": "'$QUEUE'"}' localhost:42090 LiteMQ.Purge | jq -r '.count'
