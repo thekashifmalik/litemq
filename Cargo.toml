@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 base64 = "0.22.0"
+ctrlc = "3.4.5"
 env_logger = "0.11.5"
+fs3 = "0.5.0"
 log = "0.4.22"
 prost = "0.13.4"
 tokio = { version = "1.42.0", features = ["macros", "rt-multi-thread", "fs"] }

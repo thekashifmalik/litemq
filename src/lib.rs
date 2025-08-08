@@ -2,11 +2,14 @@ use core::fmt;
 use std::env;
 use std::error::Error;
 use std::collections::HashMap;
+use std::process;
+use std::fs::{File, OpenOptions};
 use tokio::fs;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::channel;
 use std::sync::Arc;
+use fs3::FileExt;
 
 
 
@@ -34,12 +37,23 @@ mod generated {
 pub struct Server{
     queues: Mutex<HashMap<String, Arc<Mutex<PersistentQueue>>>>,
     data_dir: String,
+    _lock_file: File,
 }
 
 const DEFAULT_DATA_DIR: &str = ".litemq";
+const DATA_DIR_LOCK_FILE: &str = ".lock";
 
+/// LiteMQ Server with file-based locking to prevent multiple instances
+/// from operating on the same data directory simultaneously.
+///
+/// The server creates a `litemq.lock` file in the data directory and acquires
+/// an exclusive lock on it. If another instance is already running on the same
+/// data directory, the lock acquisition will fail and the server will refuse to start.
+///
+/// The lock file contains the Process ID (PID) of the running server for debugging purposes.
+/// The lock is automatically released when the server shuts down (either gracefully or via signal).
 impl Server {
-    pub async fn new() -> Self {
+    pub async fn new() -> Result<Self, Box<dyn Error + Send + Sync>> {
         env_logger::Builder::from_env(env_logger::Env::default().filter_or("LOG_LEVEL", "info")).format_target(false).init();
         info!("LiteMQ");
         debug!("debug logging enabled");
@@ -56,11 +70,60 @@ impl Server {
         };
         fs::create_dir_all(data_dir).await.unwrap();
 
+        // Create and acquire exclusive lock on lock file
+        let lock_path = format!("{}/{}", data_dir, DATA_DIR_LOCK_FILE);
+
+        // Open lock file without truncating (preserve existing PID if file exists)
+        let lock_file = match OpenOptions::new()
+            .create(true)
+            .write(true)
+            .read(true)
+            .open(&lock_path) {
+            Ok(file) => file,
+            Err(e) => {
+                error!("Failed to open lock file {}: {}", lock_path, e);
+                return Err(Box::new(e));
+            }
+        };
+
+        // Try to acquire exclusive lock
+        match lock_file.try_lock_exclusive() {
+            Ok(()) => {
+                info!("Successfully acquired lock on {}", lock_path);
+
+                // Now that we have the lock, we can safely write our PID (truncating any old content)
+                if let Err(e) = std::fs::write(&lock_path, format!("{}\n", process::id())) {
+                    warn!("Could not write PID to lock file: {}", e);
+                }
+
+                // Set up cleanup on process termination
+                let lock_path_cleanup = lock_path.clone();
+                ctrlc::set_handler(move || {
+                    info!("Received shutdown signal, cleaning up...");
+                    if let Err(e) = std::fs::remove_file(&lock_path_cleanup) {
+                        warn!("Could not remove lock file on shutdown: {}", e);
+                    }
+                    process::exit(0);
+                }).expect("Error setting Ctrl-C handler");
+            },
+            Err(e) => {
+                error!("Failed to acquire exclusive lock on {}: {}", lock_path, e);
+                error!("Another LiteMQ instance may already be running on this data directory");
+                return Err(Box::new(e));
+            }
+        };
+
         // Read any existing queues from disk.
         let mut queues = HashMap::new();
         let mut results = fs::read_dir(data_dir).await.unwrap();
         while let Ok(Some(entry)) = results.next_entry().await {
             let name = entry.file_name().into_string().unwrap();
+
+            // Skip the lock file and any .dequeued files
+            if name == DATA_DIR_LOCK_FILE || name.ends_with(".dequeued") {
+                continue;
+            }
+
             let path = format!("{}/{}", data_dir, name);
             let queue = Arc::new(Mutex::new(PersistentQueue::existing(&path)));
             queues.insert(name, queue);
@@ -68,10 +131,11 @@ impl Server {
         let length = queues.len();
         debug!("loaded {} queue{} from disk", length, if length == 1 {""} else {"s"});
 
-        Self{
+        Ok(Self{
             queues: Mutex::new(queues),
             data_dir: data_dir.to_string(),
-        }
+            _lock_file: lock_file,
+        })
     }
 
     pub async fn serve(self) {
