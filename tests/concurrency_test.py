@@ -1,8 +1,10 @@
 import time
 import asyncio
 
-from .core import server, flushed_client
+import pytest
 
+from .core import running_server
+from .core import flushed_client
 
 
 async def test_enqueue_while_blocking_dequeue(server):
@@ -18,3 +20,10 @@ async def test_enqueue_while_blocking_dequeue(server):
         task = asyncio.create_task(enqueue_after_delay())
         assert await client.dequeue('test-blocking') == b'message'
         await task
+
+
+async def test_cannot_start_multiple_servers():
+    with running_server():
+        with pytest.raises(Exception):
+            with running_server():
+                pass

@@ -19,6 +19,9 @@ def running_server():
     server = subprocess.Popen(["target/release/litemq"], env=TEST_ENV)
     # Sleep here to give the server time to start before the tests run.
     time.sleep(0.02)
+    # Check if the server started successfully
+    if server.poll() is not None:
+        raise RuntimeError("Server failed to start")
     try:
         yield
     finally:
