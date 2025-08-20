@@ -29,7 +29,7 @@ async def test_enqueue_and_dequeue(server, aio_benchmark):
 
 async def test_dequeues_on_large_queue(server, aio_benchmark):
     client = await flushed_client()
-    for _ in range(1000):
+    for _ in range(10000000):
         client.enqueue('test-benchmark-dequeues-on-large-queue', b'message' * 1000)
 
     async def task():
