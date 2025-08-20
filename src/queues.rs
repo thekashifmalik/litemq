@@ -176,7 +176,8 @@ impl Queue for PersistentQueue {
                 Ok(_) => {
                     if line_index == num_dequeued {
                         // Found our line, decode and return it
-                        let data = match general_purpose::STANDARD.decode(line) {
+                        let trimmed_line = line.trim();
+                        let data = match general_purpose::STANDARD.decode(trimmed_line) {
                             Ok(decoded) => decoded,
                             Err(e) => {
                                 error!("could not decode base64 data from line {}: {}", num_dequeued, e);
