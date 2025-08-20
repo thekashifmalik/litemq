@@ -3,6 +3,7 @@ import asyncio
 
 import pytest
 
+from .core import server
 from .core import running_server
 from .core import flushed_client
 
