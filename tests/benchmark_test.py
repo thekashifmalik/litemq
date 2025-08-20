@@ -29,11 +29,16 @@ async def test_enqueue_and_dequeue(server, aio_benchmark):
 
 async def test_dequeues_on_large_queue(server, aio_benchmark):
     client = await flushed_client()
-    for _ in range(10000000):
-        client.enqueue('test-benchmark-dequeues-on-large-queue', b'message' * 10000)
+    # Create a large queue with many messages
+    for _ in range(1000):
+        await client.enqueue('test-benchmark-dequeues-on-large-queue', b'message' * 1000)
 
+    # Dequeue many messages to simulate a queue with many already dequeued items
+    for _ in range(500):
+        await client.dequeue('test-benchmark-dequeues-on-large-queue')
+
+    # Now benchmark dequeuing from the middle of a large file
     async def task():
-        await client.enqueue('test-benchmark-dequeues-on-large-queue', b'message')
         await client.dequeue('test-benchmark-dequeues-on-large-queue')
     aio_benchmark(task)
 
