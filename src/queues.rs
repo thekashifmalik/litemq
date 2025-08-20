@@ -1,12 +1,10 @@
 
 use std::os::unix::fs::MetadataExt;
 
-use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::Mutex;
-use tokio::sync::mpsc::Receiver;
+use tokio::io::BufReader;
+use tokio::io::AsyncBufReadExt;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::mpsc::channel;
 
 use log::debug;
 use log::error;
@@ -60,7 +58,6 @@ impl Queue for InMemoryQueue {
 }
 
 
-use tokio::fs::File;
 use tokio::fs;
 
 
@@ -149,78 +146,66 @@ impl Queue for PersistentQueue {
         // Get num_dequeued first
         let num_dequeued = self.get_num_dequeued().await;
 
-        // Read the file once and compute both total length and get the line we need
-        let f = match fs::read_to_string(&self.path).await {
-            Ok(content) => content,
+        // Open file for reading line by line
+        let file = match fs::File::open(&self.path).await {
+            Ok(f) => f,
             Err(e) => {
-                error!("could not read file {}: {}", self.path, e);
+                error!("could not open file {}: {}", self.path, e);
                 return None;
             }
         };
 
-        let lines: Vec<&str> = f.lines().collect();
-        let total_length = lines.len() as i64;
-        let available_length = total_length - num_dequeued as i64;
+        let mut reader = BufReader::new(file);
+        let mut line = String::new();
+        let mut line_index = 0u64;
 
-        if available_length > 0 {
-            // Get the line at the current offset (num_dequeued position)
-            if let Some(line) = lines.get(num_dequeued as usize) {
-                // Decode the base64 encoded data back to original bytes
-                let data = match general_purpose::STANDARD.decode(line) {
-                    Ok(decoded) => decoded,
-                    Err(e) => {
-                        error!("could not decode base64 data from line {}: {}", num_dequeued, e);
-                        return None;
-                    }
-                };
-
-                // Update the dequeue counter by appending 'x'
-                let dequeue_path = self.get_dequeue_path();
-                match fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&dequeue_path)
-                    .await {
-                    Ok(mut f) => {
-                        if let Err(e) = f.write_all(b"x").await {
-                            error!("could not write to dequeue file {}: {}", dequeue_path, e);
-                            return None;
-                        }
-                    },
-                    Err(e) => {
-                        error!("could not open dequeue file {}: {}", dequeue_path, e);
-                        return None;
-                    }
-                };
-
-                return Some(data);
-            } else {
-                error!("line at offset {} not found in file {}", num_dequeued, self.path);
-                return None;
-            }
-        } else {
-            // Queue is empty so we can compact to reclaim space
-            if total_length > 0 && num_dequeued > 0 {
-                debug!("compacting queue: {}", self.path);
-
-                // Clear the main queue file
-                match fs::write(&self.path, "").await {
-                    Ok(_) => {
-                        // Remove the dequeue tracking file if it exists
+        // Skip to the line we need (num_dequeued position)
+        while line_index <= num_dequeued {
+            line.clear();
+            match reader.read_line(&mut line).await {
+                Ok(0) => {
+                    // End of file - queue is empty, compact if needed
+                    if num_dequeued > 0 {
+                        debug!("compacting empty queue: {}", self.path);
+                        let _ = fs::write(&self.path, "").await;
                         let dequeue_path = self.get_dequeue_path();
-                        if fs::metadata(&dequeue_path).await.is_ok() {
-                            if let Err(e) = fs::remove_file(&dequeue_path).await {
-                                error!("failed to remove dequeue file {}: {}", dequeue_path, e);
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        error!("failed to compact queue {}: {}", self.path, e);
+                        let _ = fs::remove_file(&dequeue_path).await;
                     }
+                    return None;
+                }
+                Ok(_) => {
+                    if line_index == num_dequeued {
+                        // Found our line, decode and return it
+                        let data = match general_purpose::STANDARD.decode(line) {
+                            Ok(decoded) => decoded,
+                            Err(e) => {
+                                error!("could not decode base64 data from line {}: {}", num_dequeued, e);
+                                return None;
+                            }
+                        };
+
+                        // Update the dequeue counter
+                        let dequeue_path = self.get_dequeue_path();
+                        if let Ok(mut f) = fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&dequeue_path)
+                            .await {
+                            let _ = f.write_all(b"x").await;
+                        }
+
+                        return Some(data);
+                    }
+                    line_index += 1;
+                }
+                Err(e) => {
+                    error!("error reading file {}: {}", self.path, e);
+                    return None;
                 }
             }
-            None
         }
+
+        None
     }
 
     async fn purge(&mut self) -> i64 {
