@@ -89,7 +89,7 @@ impl Server {
         // Try to acquire exclusive lock
         match lock_file.try_lock_exclusive() {
             Ok(()) => {
-                info!("Successfully acquired lock on {}", lock_path);
+                debug!("Successfully acquired lock on {}", lock_path);
 
                 // Now that we have the lock, we can safely write our PID (truncating any old content)
                 if let Err(e) = std::fs::write(&lock_path, format!("{}\n", process::id())) {
@@ -97,10 +97,10 @@ impl Server {
                 }
 
                 // Set up cleanup on process termination
-                let lock_path_cleanup = lock_path.clone();
+                // let lock_path_cleanup = lock_path.clone();
                 ctrlc::set_handler(move || {
                     info!("Received shutdown signal, cleaning up...");
-                    if let Err(e) = std::fs::remove_file(&lock_path_cleanup) {
+                    if let Err(e) = std::fs::remove_file(&lock_path) {
                         warn!("Could not remove lock file on shutdown: {}", e);
                     }
                     process::exit(0);
@@ -108,7 +108,6 @@ impl Server {
             },
             Err(e) => {
                 error!("Failed to acquire exclusive lock on {}: {}", lock_path, e);
-                error!("Another LiteMQ instance may already be running on this data directory");
                 return Err(Box::new(e));
             }
         };
