@@ -199,7 +199,26 @@ impl Queue for PersistentQueue {
                 return None;
             }
         } else {
-            // TODO: Does it make sense to do compaction here when the total_length > 0?
+            // Queue is empty so we can compact to reclaim space
+            if total_length > 0 && num_dequeued > 0 {
+                debug!("compacting queue: {}", self.path);
+
+                // Clear the main queue file
+                match fs::write(&self.path, "").await {
+                    Ok(_) => {
+                        // Remove the dequeue tracking file if it exists
+                        let dequeue_path = self.get_dequeue_path();
+                        if fs::metadata(&dequeue_path).await.is_ok() {
+                            if let Err(e) = fs::remove_file(&dequeue_path).await {
+                                error!("failed to remove dequeue file {}: {}", dequeue_path, e);
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        error!("failed to compact queue {}: {}", self.path, e);
+                    }
+                }
+            }
             None
         }
     }
